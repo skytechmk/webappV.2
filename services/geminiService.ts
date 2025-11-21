@@ -20,9 +20,8 @@ const getAiClient = () => {
 export const generateEventDescription = async (title: string, date: string, type: string): Promise<string> => {
   // Attempt to use local Ollama instance first
   try {
-    // Create a timeout for the local request to avoid hanging if unreachable
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3000); // Reduced timeout for production responsiveness
+    const timeoutId = setTimeout(() => controller.abort(), 3000); 
 
     const response = await fetch(`${OLLAMA_BASE_URL}/api/generate`, {
       method: 'POST',
@@ -49,11 +48,10 @@ export const generateEventDescription = async (title: string, date: string, type
       }
     }
   } catch (error) {
-    // Silent fail for Ollama in production if not available
-    // console.warn("Ollama unreachable, falling back to Cloud AI.");
+    // Silent fail for Ollama
   }
 
-  // Fallback to Gemini if Ollama fails or is unreachable
+  // Fallback to Gemini
   const ai = getAiClient();
   if (!ai) return "Join us for an amazing celebration!";
 
@@ -88,7 +86,8 @@ export const generateImageCaption = async (base64Image: string): Promise<string>
             }
           },
           {
-            text: "Generate a very short, fun, 3-5 word caption for this party photo."
+            // Updated prompt to include searchable keywords
+            text: "Generate a short caption (max 10 words) for this photo. Include key objects, colors, or the mood (e.g., 'Birthday cake with candles', 'People dancing happily')."
           }
         ]
       }

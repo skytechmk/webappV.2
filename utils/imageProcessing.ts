@@ -1,5 +1,15 @@
+import { WatermarkPosition } from '../types';
 
-import { User, WatermarkPosition } from '../types';
+// Helper to load image
+const loadImage = (src: string): Promise<HTMLImageElement> => {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = src;
+    });
+};
 
 export const applyWatermark = async (
   imageSrc: string, 
@@ -28,24 +38,20 @@ export const applyWatermark = async (
             ctx.drawImage(img, 0, 0);
             
             if (logoUrl) {
-                // Draw Logo Image
                 const logo = new Image();
                 logo.src = logoUrl;
                 await new Promise((r) => { 
-                    logo.onload = r; 
-                    logo.onerror = r; // Resolve even on error to prevent hang
+                    logo.onload = () => r(null); 
+                    logo.onerror = () => r(null); 
                 });
                 
-                // Calculate dimensions
                 const scalePercent = sizePercent / 100;
                 const maxWidth = img.width * scalePercent;
                 
-                // Maintain aspect ratio
                 const ratio = maxWidth / logo.width;
                 const logoW = logo.width * ratio;
                 const logoH = logo.height * ratio;
                 
-                // Offsets
                 const paddingX = img.width * (offXPercent / 100);
                 const paddingY = img.height * (offYPercent / 100);
 
@@ -53,26 +59,11 @@ export const applyWatermark = async (
                 let dy = 0;
 
                 switch(position) {
-                    case 'top-left':
-                        dx = paddingX;
-                        dy = paddingY;
-                        break;
-                    case 'top-right':
-                        dx = img.width - logoW - paddingX;
-                        dy = paddingY;
-                        break;
-                    case 'bottom-left':
-                        dx = paddingX;
-                        dy = img.height - logoH - paddingY;
-                        break;
-                    case 'bottom-right':
-                        dx = img.width - logoW - paddingX;
-                        dy = img.height - logoH - paddingY;
-                        break;
-                    case 'center':
-                        dx = (img.width / 2) - (logoW / 2) + paddingX;
-                        dy = (img.height / 2) - (logoH / 2) + paddingY;
-                        break;
+                    case 'top-left': dx = paddingX; dy = paddingY; break;
+                    case 'top-right': dx = img.width - logoW - paddingX; dy = paddingY; break;
+                    case 'bottom-left': dx = paddingX; dy = img.height - logoH - paddingY; break;
+                    case 'bottom-right': dx = img.width - logoW - paddingX; dy = img.height - logoH - paddingY; break;
+                    case 'center': dx = (img.width / 2) - (logoW / 2) + paddingX; dy = (img.height / 2) - (logoH / 2) + paddingY; break;
                 }
 
                 ctx.globalAlpha = opacity;
@@ -80,12 +71,10 @@ export const applyWatermark = async (
                 ctx.globalAlpha = 1.0;
 
             } else if (text) {
-                // Draw Text Watermark
-                const fontSize = Math.max(24, img.width * (sizePercent / 300)); // Scale font based on size preference
+                const fontSize = Math.max(24, img.width * (sizePercent / 300));
                 ctx.font = `bold ${fontSize}px sans-serif`;
                 ctx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
                 
-                // Simple Shadow
                 ctx.shadowColor = 'rgba(0,0,0,0.7)';
                 ctx.shadowBlur = 4;
                 ctx.shadowOffsetX = 2;
@@ -97,51 +86,77 @@ export const applyWatermark = async (
                 let x = 0;
                 let y = 0;
 
-                // Measure text
-                const metrics = ctx.measureText(text.toUpperCase());
-                const textW = metrics.width;
-                const textH = fontSize; // approx
-
-                // Determine text alignment and position based on WatermarkPosition
                 switch(position) {
-                    case 'top-left':
-                        ctx.textAlign = 'left';
-                        ctx.textBaseline = 'top';
-                        x = paddingX;
-                        y = paddingY;
-                        break;
-                    case 'top-right':
-                        ctx.textAlign = 'right';
-                        ctx.textBaseline = 'top';
-                        x = img.width - paddingX;
-                        y = paddingY;
-                        break;
-                    case 'bottom-left':
-                        ctx.textAlign = 'left';
-                        ctx.textBaseline = 'bottom';
-                        x = paddingX;
-                        y = img.height - paddingY;
-                        break;
-                    case 'bottom-right':
-                        ctx.textAlign = 'right';
-                        ctx.textBaseline = 'bottom';
-                        x = img.width - paddingX;
-                        y = img.height - paddingY;
-                        break;
-                    case 'center':
-                        ctx.textAlign = 'center';
-                        ctx.textBaseline = 'middle';
-                        x = (img.width / 2) + paddingX;
-                        y = (img.height / 2) + paddingY;
-                        break;
+                    case 'top-left': ctx.textAlign = 'left'; ctx.textBaseline = 'top'; x = paddingX; y = paddingY; break;
+                    case 'top-right': ctx.textAlign = 'right'; ctx.textBaseline = 'top'; x = img.width - paddingX; y = paddingY; break;
+                    case 'bottom-left': ctx.textAlign = 'left'; ctx.textBaseline = 'bottom'; x = paddingX; y = img.height - paddingY; break;
+                    case 'bottom-right': ctx.textAlign = 'right'; ctx.textBaseline = 'bottom'; x = img.width - paddingX; y = img.height - paddingY; break;
+                    case 'center': ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; x = (img.width / 2) + paddingX; y = (img.height / 2) + paddingY; break;
                 }
 
                 ctx.fillText(text.toUpperCase(), x, y);
             }
             
-            resolve(canvas.toDataURL('image/jpeg', 0.9));
+            resolve(canvas.toDataURL('image/jpeg', 0.95)); // Increased quality
         };
         img.onerror = () => resolve(imageSrc);
         img.src = imageSrc;
     });
+};
+
+export const createPhotoStrip = async (images: string[], footerText: string = "SnapifY"): Promise<string> => {
+    if (images.length === 0) return '';
+
+    try {
+        const loadedImages = await Promise.all(images.map(src => loadImage(src)));
+        const baseWidth = loadedImages[0].width;
+        const baseHeight = loadedImages[0].height;
+        
+        // Strip Config
+        const padding = Math.floor(baseWidth * 0.05); // 5% padding
+        const bottomBannerHeight = Math.floor(baseHeight * 0.25); // Larger footer for text
+        
+        const canvasWidth = baseWidth + (padding * 2);
+        const canvasHeight = (baseHeight * loadedImages.length) + (padding * (loadedImages.length + 1)) + bottomBannerHeight;
+        
+        const canvas = document.createElement('canvas');
+        canvas.width = canvasWidth;
+        canvas.height = canvasHeight;
+        const ctx = canvas.getContext('2d');
+        
+        if (!ctx) throw new Error('Context not available');
+
+        // Background
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+        // Draw Images
+        loadedImages.forEach((img, index) => {
+            const y = padding + (index * (baseHeight + padding));
+            ctx.drawImage(img, padding, y, baseWidth, baseHeight);
+        });
+
+        // Draw Footer
+        const footerY = canvasHeight - bottomBannerHeight;
+        ctx.fillStyle = '#1a1a1a';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        
+        const dateStr = new Date().toLocaleDateString();
+        const fontSize = Math.floor(baseWidth * 0.08); // Larger font
+        
+        // Brand
+        ctx.font = `900 ${fontSize}px "Inter", sans-serif`;
+        ctx.fillText(footerText.toUpperCase(), canvasWidth / 2, footerY + (bottomBannerHeight * 0.35));
+        
+        // Date
+        ctx.font = `500 ${fontSize * 0.5}px "Inter", sans-serif`;
+        ctx.fillStyle = '#666666';
+        ctx.fillText(dateStr, canvasWidth / 2, footerY + (bottomBannerHeight * 0.7));
+
+        return canvas.toDataURL('image/jpeg', 0.95);
+    } catch (e) {
+        console.error("Error generating photostrip", e);
+        return images[0]; // Fallback
+    }
 };

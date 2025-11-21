@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 // @ts-ignore
 import JSZip from 'jszip';
@@ -19,7 +18,7 @@ import { GuestLoginModal } from './components/GuestLoginModal';
 import { StudioSettingsModal } from './components/StudioSettingsModal';
 import { applyWatermark } from './utils/imageProcessing';
 import { api } from './services/api';
-import { getStoredUserId, storeDeviceFingerprint, isKnownDevice } from './utils/deviceFingerprint';
+import { getStoredUserId, isKnownDevice } from './utils/deviceFingerprint';
 
 // Safe access to env variables
 // @ts-ignore
@@ -43,8 +42,8 @@ export default function App() {
   const [language, setLanguage] = useState<Language>('en');
   const [authError, setAuthError] = useState('');
   
-  // Guest Mode State
-  const [guestName, setGuestName] = useState('');
+  // Guest Mode State - Initialize from LocalStorage for persistence
+  const [guestName, setGuestName] = useState(() => localStorage.getItem('snapify_guest_name') || '');
   const [showGuestLogin, setShowGuestLogin] = useState(false);
   const [pendingAction, setPendingAction] = useState<'upload' | 'camera' | null>(null);
 
@@ -330,8 +329,10 @@ export default function App() {
     setIsLoggingIn(false);
   };
 
+  // Updated Guest Login to persist name in localStorage
   const handleGuestLogin = (name: string) => {
     setGuestName(name);
+    localStorage.setItem('snapify_guest_name', name);
     setShowGuestLogin(false);
     if (pendingAction === 'camera') {
       setIsCameraOpen(true);
@@ -471,6 +472,7 @@ export default function App() {
   // -- Media & Upload --
 
   const initiateMediaAction = (action: 'upload' | 'camera') => {
+    // Check if user is logged in OR if a guest session is persisted
     if (currentUser || guestName) {
       if (action === 'camera') setIsCameraOpen(true);
       else fileInputRef.current?.click();
