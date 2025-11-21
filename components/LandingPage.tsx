@@ -3,6 +3,7 @@ import { Zap, Globe, Menu, X, Mail } from 'lucide-react';
 import { Language, TranslateFn, UserRole, TierLevel } from '../types';
 import { HERO_IMAGES, getPricingTiers } from '../constants';
 import { PricingCard } from './PricingCard';
+import { TermsModal } from './TermsModal';
 
 interface LandingPageProps {
   onGoogleLogin: () => void;
@@ -28,6 +29,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   const [currentHeroImageIndex, setCurrentHeroImageIndex] = useState(0);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showLangMenu, setShowLangMenu] = useState(false);
+  const [showTerms, setShowTerms] = useState(false);
   const googleButtonRef = useRef<HTMLDivElement>(null);
   
   // Form State
@@ -133,7 +135,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         <div className="absolute inset-0 bg-gradient-to-t from-black via-black/80 to-transparent" />
       </div>
 
-      <nav className="relative z-10 flex items-center justify-between p-6 max-w-7xl mx-auto w-full">
+      {/* Updated z-index from z-10 to z-20 to ensure dropdown appears over main content */}
+      <nav className="relative z-20 flex items-center justify-between p-6 max-w-7xl mx-auto w-full">
         <div className="flex items-center space-x-2 font-bold text-2xl tracking-tight">
           <div className="bg-indigo-600 p-1.5 rounded-lg">
             <Zap size={20} className="text-white" />
@@ -344,7 +347,17 @@ export const LandingPage: React.FC<LandingPageProps> = ({
            {/* Google Button Container - rendered by GSI */}
            <div ref={googleButtonRef} className="w-full h-[44px] flex justify-center"></div>
            
-          <p className="text-xs text-slate-500 mt-4">{t('terms')}</p>
+          <p className="text-xs text-slate-500 mt-4">
+            {t('terms')}
+            <span className="mx-1">•</span>
+            <button 
+                type="button"
+                onClick={() => setShowTerms(true)}
+                className="text-indigo-400 hover:text-indigo-300 underline underline-offset-2 transition-colors"
+            >
+                {t('termsLink')}
+            </button>
+          </p>
         </div>
 
         <div className="mt-24 w-full max-w-6xl">
@@ -365,6 +378,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           </div>
         </div>
       </main>
+
+      {showTerms && <TermsModal onClose={() => setShowTerms(false)} t={t} />}
     </div>
   );
 };
