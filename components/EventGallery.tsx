@@ -135,7 +135,19 @@ export const EventGallery: React.FC<EventGalleryProps> = ({
   const [guestbookName, setGuestbookName] = useState(currentUser?.name || '');
   
   // PIN State
-  const [isPinLocked, setIsPinLocked] = useState(!!event.pin);
+  const PIN_STORAGE_KEY = `unlocked_event_${event.id}`;
+  const [isPinLocked, setIsPinLocked] = useState(() => {
+      // If owner or admin, never lock
+      if (isOwner || currentUser?.role === UserRole.ADMIN) return false;
+      
+      // Check if already unlocked in this session
+      if (sessionStorage.getItem(PIN_STORAGE_KEY) === 'true') return false;
+
+      // Check if event actually has a PIN (using new hasPin flag for security)
+      // We fall back to event.pin check for admins who receive the full object
+      return !!event.hasPin || (!!event.pin && event.pin.length > 0);
+  });
+  
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState('');
 
@@ -226,6 +238,7 @@ export const EventGallery: React.FC<EventGalleryProps> = ({
       setLocalMedia(event.media);
   }, [event.media]);
 
+  // Ensure admins/owners bypass lock immediately if context changes
   useEffect(() => {
      if (isOwner || currentUser?.role === UserRole.ADMIN) {
          setIsPinLocked(false);
@@ -294,13 +307,7 @@ export const EventGallery: React.FC<EventGalleryProps> = ({
   const navigateLightbox = useCallback((direction: 'next' | 'prev') => {
       if (lightboxIndex === null || isAnimating) return;
       
-      // We use full window width for translation logic
       const windowWidth = window.innerWidth;
-      // If going Next, we want to slide to -200% (from -100%). Delta is -100vw.
-      // If going Prev, we want to slide to 0% (from -100%). Delta is +100vw.
-      
-      // However, dragOffset is *added* to the base -100vw.
-      // So target dragOffset should be -windowWidth (for Next) or +windowWidth (for Prev).
       const targetOffset = direction === 'next' ? -windowWidth : windowWidth;
       
       setIsAnimating(true);
@@ -315,36 +322,26 @@ export const EventGallery: React.FC<EventGalleryProps> = ({
               newIndex = (lightboxIndex - 1 + len) % len;
           }
           
-          // CRITICAL: Update index AND reset offset instantly (no transition)
-          // This creates the infinite scroll illusion
-          setIsSnapping(true); // Disable transitions
-          
-          // Force update order
+          setIsSnapping(true); 
           setLightboxIndex(newIndex);
           setDragOffset(0);
-          
-          // Unlock animation lock
           setIsAnimating(false); 
 
-          // Re-enable transitions after a tiny delay to allow React to repaint the DOM at the new 0 offset
           setTimeout(() => {
               setIsSnapping(false);
           }, 50);
-      }, 300); // Match CSS transition duration
+      }, 300);
   }, [lightboxIndex, displayMedia.length, isAnimating]);
 
   // --- Unified Pointer Handlers for Sliding (Touch + Mouse) ---
   const onPointerDown = (e: React.PointerEvent) => {
       if (isAnimating) return;
-      // Prevent default to avoid scrolling / text selection issues
-      // e.preventDefault(); // Note: Be careful with blocking clicks on children, handle carefully
       touchStartRef.current = e.clientX;
       setIsDragging(true);
   };
 
   const onPointerMove = (e: React.PointerEvent) => {
       if (!touchStartRef.current || isAnimating || !isDragging) return;
-      // e.preventDefault();
       const currentX = e.clientX;
       const diff = currentX - touchStartRef.current;
       setDragOffset(diff);
@@ -357,14 +354,13 @@ export const EventGallery: React.FC<EventGalleryProps> = ({
       }
       setIsDragging(false);
       
-      const threshold = window.innerWidth / 4; // Reduced threshold for easier desktop swipe
+      const threshold = window.innerWidth / 4; 
       
       if (dragOffset < -threshold) {
           navigateLightbox('next');
       } else if (dragOffset > threshold) {
           navigateLightbox('prev');
       } else {
-          // Snap back to center if threshold not met
           setIsAnimating(true);
           setDragOffset(0);
           setTimeout(() => setIsAnimating(false), 300);
@@ -408,8 +404,12 @@ export const EventGallery: React.FC<EventGalleryProps> = ({
   const handleUnlock = async (e: React.FormEvent) => {
       e.preventDefault();
       const isValid = await api.validateEventPin(event.id, pinInput);
-      if (isValid) setIsPinLocked(false);
-      else setPinError(t('invalidPin'));
+      if (isValid) {
+          setIsPinLocked(false);
+          sessionStorage.setItem(PIN_STORAGE_KEY, 'true');
+      } else {
+          setPinError(t('invalidPin'));
+      }
   };
 
   const handleGuestbookSubmit = async (e: React.FormEvent) => {

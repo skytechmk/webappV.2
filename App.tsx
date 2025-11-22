@@ -352,7 +352,9 @@ export default function App() {
 
   const handleCreateEvent = async (data: any) => {
     if (!currentUser) return;
-    const { title, date, theme, description, adminOptions } = data;
+    // FIX: Destructure 'pin' correctly from the data object
+    const { title, date, theme, description, pin, adminOptions } = data;
+    
     let expiresAt: string | null = null;
     const now = new Date().getTime();
 
@@ -385,6 +387,7 @@ export default function App() {
       code: Math.random().toString(36).substring(2, 8).toUpperCase(),
       media: [],
       expiresAt,
+      pin: pin, // FIX: Assign the pin to the new event
       views: 0,
       downloads: 0
     };
@@ -657,19 +660,47 @@ export default function App() {
   };
 
   return (
-    // APP SHELL LAYOUT
-    // Fixed full height container, safe area padding handled on wrapper
-    <div className="h-full w-full flex flex-col bg-slate-50 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]">
+    // APP SHELL LAYOUT - ADAPTIVE & STATIC HEADER
+    // h-[100dvh] ensures app fills the visible viewport perfectly on mobile browsers
+    // No root padding allows Landing Page to bleed to edges
+    <div className="h-[100dvh] w-full flex flex-col bg-slate-50">
       <OfflineBanner t={t} />
       <ShareTargetHandler onShareReceive={handleIncomingShare} />
       <ReloadPrompt />
+
+      {/* STATIC HEADER AREA */}
+      {/* Moved Navigation out of scroll view to ensure it remains static at the top */}
+      {view !== 'landing' && (
+        <div className="flex-shrink-0 z-50 w-full bg-slate-50/95 backdrop-blur-md border-b border-slate-200">
+             <Navigation 
+                currentUser={currentUser}
+                guestName={guestName}
+                view={view}
+                currentEventTitle={activeEvent?.title}
+                language={language}
+                onChangeLanguage={changeLanguage}
+                onLogout={handleLogout}
+                onSignIn={handleSignInRequest} 
+                onHome={() => {
+                  setCurrentEventId(null);
+                  if (currentUser) setView(currentUser.role === UserRole.ADMIN ? 'admin' : 'dashboard');
+                  else setView('landing');
+                }}
+                onBack={handleBack}
+                onToAdmin={() => setView('admin')}
+                onOpenSettings={() => setShowStudioSettings(true)}
+                t={t}
+             />
+        </div>
+      )}
       
-      {/* CONTENT AREA (Scrollable) */}
-      {/* The entire app scrolls inside this div, keeping the browser chrome stable */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden scroll-smooth w-full h-full relative no-scrollbar">
+      {/* SCROLLABLE CONTENT AREA */}
+      {/* Contains all the main views and scrolls independently */}
+      <div className="flex-1 overflow-y-auto overflow-x-hidden scroll-smooth w-full relative no-scrollbar">
           
           {view === 'landing' ? (
-            <>
+            // Landing page can handle its own padding if needed, or bleed to edges
+            <div className="min-h-full w-full">
               <LandingPage 
                 onGoogleLogin={() => { if (window.google) window.google.accounts.id.prompt(); }}
                 onEmailAuth={handleEmailAuth}
@@ -682,34 +713,11 @@ export default function App() {
               />
               <PWAInstallPrompt t={t} />
               {showContactModal && <ContactModal onClose={() => setShowContactModal(false)} t={t} />}
-            </>
+            </div>
           ) : (
              // AUTHENTICATED / EVENT VIEWS
              <div className="flex flex-col min-h-full">
-                 {/* Navigation is sticky at the top of the scroll container */}
-                 <div className="sticky top-0 z-[50] w-full bg-slate-50/95 backdrop-blur-md">
-                     <Navigation 
-                        currentUser={currentUser}
-                        guestName={guestName}
-                        view={view}
-                        currentEventTitle={activeEvent?.title}
-                        language={language}
-                        onChangeLanguage={changeLanguage}
-                        onLogout={handleLogout}
-                        onSignIn={handleSignInRequest} 
-                        onHome={() => {
-                          setCurrentEventId(null);
-                          if (currentUser) setView(currentUser.role === UserRole.ADMIN ? 'admin' : 'dashboard');
-                          else setView('landing');
-                        }}
-                        onBack={handleBack}
-                        onToAdmin={() => setView('admin')}
-                        onOpenSettings={() => setShowStudioSettings(true)}
-                        t={t}
-                     />
-                 </div>
-
-                 <div className="flex-1 pb-32"> {/* Add padding bottom for footer */}
+                 <div className="flex-1 pb-32"> 
                     {view === 'admin' && currentUser?.role === UserRole.ADMIN && (
                          <AdminDashboard 
                             users={allUsers}
@@ -740,6 +748,7 @@ export default function App() {
 
                     {view === 'event' && activeEvent && (
                         <EventGallery 
+                          key={activeEvent.id} // Force remount on ID change to reset PIN state
                           event={activeEvent}
                           currentUser={currentUser}
                           hostUser={hostUser}
@@ -761,6 +770,7 @@ export default function App() {
              </div>
           )}
           
+          {/* Live Slideshow - Full Screen Overlay */}
           {view === 'live' && activeEvent && (
                 <LiveSlideshow 
                   event={activeEvent}
@@ -771,7 +781,7 @@ export default function App() {
       </div>
 
       {/* FLOATING ELEMENTS & MODALS (Outside scroll view to stay on top) */}
-      <PWAInstallPrompt t={t} />
+      {view !== 'landing' && <PWAInstallPrompt t={t} />}
       
       <input type="file" ref={fileInputRef} className="hidden" accept="image/*,video/*" onChange={handleFileUpload} />
       

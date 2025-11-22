@@ -50,8 +50,6 @@ const s3Client = new S3Client({
 });
 
 // Web Push Configuration
-// Note: In production, these should be generated once and stored in env vars
-// Run `npx web-push generate-vapid-keys` to get these
 const vapidKeys = {
   publicKey: process.env.VAPID_PUBLIC_KEY || 'BPhZ...placeholder...',
   privateKey: process.env.VAPID_PRIVATE_KEY || '...placeholder...'
@@ -122,7 +120,6 @@ const db = new sqlite3.Database(dbPath, (err) => {
 
 // Initialize Tables
 db.serialize(() => {
-    // ... existing users table ...
     db.run(`CREATE TABLE IF NOT EXISTS users (
         id TEXT PRIMARY KEY,
         name TEXT,
@@ -141,7 +138,6 @@ db.serialize(() => {
         watermarkOffsetY REAL
     )`);
 
-    // Ensure Admin Exists for FK Constraints (Self-Repair)
     const adminId = 'admin-system-id';
     const adminName = 'System Admin';
     const joined = new Date().toISOString();
@@ -168,7 +164,6 @@ db.serialize(() => {
         FOREIGN KEY(hostId) REFERENCES users(id) ON DELETE CASCADE
     )`);
     
-    // MIGRATION: Check if privacy column exists, if not add it
     db.all("PRAGMA table_info(media)", (err, rows) => {
         if (err) return;
         const hasPrivacy = rows.some(row => row.name === 'privacy');
@@ -176,8 +171,6 @@ db.serialize(() => {
             console.log("Migrating media table: Adding privacy column...");
             db.run("ALTER TABLE media ADD COLUMN privacy TEXT DEFAULT 'public'");
         }
-        
-        // MIGRATION: Check if uploaderId column exists, if not add it
         const hasUploaderId = rows.some(row => row.name === 'uploaderId');
         if (!hasUploaderId) {
             console.log("Migrating media table: Adding uploaderId column...");
@@ -199,6 +192,7 @@ db.serialize(() => {
         watermarkText TEXT,
         likes INTEGER DEFAULT 0,
         privacy TEXT DEFAULT 'public',
+        uploaderId TEXT,
         FOREIGN KEY(eventId) REFERENCES events(id) ON DELETE CASCADE
     )`);
     
@@ -251,8 +245,6 @@ async function uploadToS3(filePath, key, contentType) {
     }
 }
 
-// IMAGE PROXY ROUTE
-// Solves connectivity issues for mobile users on cellular networks by proxying local S3 streams
 app.get('/api/proxy-media', async (req, res) => {
     const { key } = req.query;
     if (!key || typeof key !== 'string') return res.status(400).send("Missing key");
@@ -276,7 +268,6 @@ app.get('/api/proxy-media', async (req, res) => {
     }
 });
 
-// Helper to generate Public Proxy URL
 function getPublicUrl(key) {
     return `/api/proxy-media?key=${encodeURIComponent(key)}`;
 }
@@ -290,18 +281,13 @@ async function attachPublicUrls(mediaList) {
     }));
 }
 
-// Socket.io
 io.on('connection', (socket) => {
     socket.on('join_event', (eventId) => {
         socket.join(eventId);
     });
 });
 
-// --- API ENDPOINTS ---
-
 app.get('/api/health', (req, res) => res.json({ status: 'ok', uptime: process.uptime() }));
-
-// --- AUTHENTICATION ---
 
 app.post('/api/auth/login', (req, res) => {
     const { email, password } = req.body;
@@ -324,7 +310,6 @@ app.post('/api/auth/login', (req, res) => {
             joinedDate: new Date().toISOString()
         };
         
-        // Ensure admin exists in DB (Self-Repair)
         db.run(`INSERT OR IGNORE INTO users (id, name, email, role, tier, storageUsedMb, storageLimitMb, joinedDate, studioName) 
             VALUES (?, ?, ?, 'ADMIN', 'STUDIO', 0, -1, ?, 'System Root')`, 
             ['admin-system-id', 'System Admin', ADMIN_EMAIL, new Date().toISOString()], (err) => {
@@ -349,25 +334,18 @@ app.post('/api/auth/login', (req, res) => {
 });
 
 app.post('/api/auth/google', (req, res) => {
-    console.log("Processing Google Login for:", req.body.email);
     const { email, name } = req.body;
-    
     if (!email) return res.status(400).json({ error: "Email is required" });
 
     const normalizedEmail = email.toLowerCase();
-    
     const safeRole = 'USER';
     const safeTier = 'FREE';
     const safeStorageLimit = 100; 
 
     db.get("SELECT * FROM users WHERE lower(email) = ?", [normalizedEmail], (err, row) => {
-        if (err) {
-            console.error("DB Error in Google Auth:", err);
-            return res.status(500).json({ error: err.message });
-        }
+        if (err) return res.status(500).json({ error: err.message });
         
         if (row) {
-            console.log("User found, logging in:", row.id);
             const token = jwt.sign({ 
                 id: row.id, 
                 role: row.role, 
@@ -375,7 +353,6 @@ app.post('/api/auth/google', (req, res) => {
             }, JWT_SECRET, { expiresIn: JWT_EXPIRY });
             return res.json({ token, user: row });
         } else {
-            console.log("User not found, creating new:", normalizedEmail);
             const newId = `user-${Date.now()}`;
             const joinedDate = new Date().toISOString().split('T')[0];
             
@@ -400,43 +377,14 @@ app.post('/api/auth/google', (req, res) => {
     });
 });
 
-// --- PUSH NOTIFICATION ENDPOINTS ---
-
 app.post('/api/push/subscribe', authenticateToken, (req, res) => {
-    const subscription = req.body;
-    const userId = req.user.id;
-    
-    // In a real app, store this in a 'subscriptions' table linked to the user
-    // db.run("INSERT INTO subscriptions (userId, endpoint, keys) VALUES ...")
-    
-    console.log(`User ${userId} subscribed to push notifications`);
     res.status(201).json({});
 });
 
 app.post('/api/push/send', authenticateToken, (req, res) => {
-    // Example endpoint to manually trigger a push (Admin only)
     if (req.user.role !== 'ADMIN') return res.sendStatus(403);
-    
-    const notificationPayload = {
-        notification: {
-            title: 'SnapifY Update',
-            body: 'New photos added to your event!',
-            icon: 'https://img.icons8.com/fluency/192/camera.png',
-            vibrate: [100, 50, 100],
-            data: {
-                dateOfArrival: Date.now(),
-                primaryKey: 1
-            }
-        }
-    };
-
-    // Fetch all subscriptions from DB and send
-    // Promise.all(subscriptions.map(sub => webpush.sendNotification(sub, JSON.stringify(notificationPayload))))
-    
     res.json({ success: true, message: "Push notifications queued" });
 });
-
-// --- ADMIN ACTIONS ---
 
 app.post('/api/admin/reset', authenticateToken, async (req, res) => {
     if (req.user.role !== 'ADMIN') {
@@ -449,8 +397,6 @@ app.post('/api/admin/reset', authenticateToken, async (req, res) => {
     }
 
     try {
-        console.log(`[System] Admin ${req.user.email} initiated system reset.`);
-
         db.serialize(() => {
             db.run("DELETE FROM comments");
             db.run("DELETE FROM guestbook");
@@ -458,7 +404,6 @@ app.post('/api/admin/reset', authenticateToken, async (req, res) => {
             db.run("DELETE FROM events");
             db.run("DELETE FROM users");
             
-            // Re-seed Admin immediately to prevent lockout
             const adminId = 'admin-system-id';
             const adminName = 'System Admin';
             const joined = new Date().toISOString();
@@ -467,12 +412,10 @@ app.post('/api/admin/reset', authenticateToken, async (req, res) => {
                     [adminId, adminName, ADMIN_EMAIL, joined]);
         });
 
-        // Clear Local Uploads Folder
         fs.readdir(uploadDir, (err, files) => {
-            if (err) console.error(err);
-            else {
+            if (!err) {
                 for (const file of files) {
-                    fs.unlink(path.join(uploadDir, file), (e) => { if(e) console.error(e); });
+                    fs.unlink(path.join(uploadDir, file), () => {});
                 }
             }
         });
@@ -480,12 +423,9 @@ app.post('/api/admin/reset', authenticateToken, async (req, res) => {
         res.json({ success: true, message: "System successfully reset." });
 
     } catch (error) {
-        console.error("[System] Reset failed:", error);
         res.status(500).json({ error: "Internal Server Error during reset" });
     }
 });
-
-// --- USERS ---
 
 app.get('/api/users', authenticateToken, (req, res) => {
     if (req.user.role !== 'ADMIN') return res.sendStatus(403);
@@ -529,14 +469,12 @@ app.put('/api/users/:id', authenticateToken, (req, res) => {
     const u = req.body;
     const targetId = req.params.id;
 
-    // Only admin or self can update
     if (req.user.id !== targetId && req.user.role !== 'ADMIN') return res.sendStatus(403);
 
     db.get("SELECT * FROM users WHERE id = ?", [targetId], (err, existingUser) => {
         if (err) return res.status(500).json({ error: err.message });
         if (!existingUser) return res.status(404).json({ error: "User not found" });
 
-        // Strict Role Escalation Check
         if (u.role !== existingUser.role) {
             if (req.user.id !== 'admin-system-id') {
                 return res.status(403).json({ error: "Only the Root Admin can change user roles." });
@@ -546,10 +484,7 @@ app.put('/api/users/:id', authenticateToken, (req, res) => {
         const stmt = db.prepare(`UPDATE users SET name=?, role=?, tier=?, storageUsedMb=?, storageLimitMb=?, studioName=?, logoUrl=?, watermarkOpacity=?, watermarkSize=?, watermarkPosition=?, watermarkOffsetX=?, watermarkOffsetY=? WHERE id=?`);
         stmt.run(u.name, u.role, u.tier, u.storageUsedMb, u.storageLimitMb, u.studioName, u.logoUrl, u.watermarkOpacity, u.watermarkSize, u.watermarkPosition, u.watermarkOffsetX, u.watermarkOffsetY, targetId, (err) => {
             if (err) return res.status(500).json({ error: err.message });
-            
-            // Broadcast update to all clients so the user sees changes immediately
             io.emit('user_updated', { ...u, id: targetId });
-            
             res.json({ success: true });
         });
         stmt.finalize();
@@ -564,8 +499,6 @@ app.delete('/api/users/:id', authenticateToken, (req, res) => {
         res.json({ success: true });
     });
 });
-
-// --- EVENTS ---
 
 app.get('/api/events', authenticateToken, (req, res) => {
     const callerId = req.user.id;
@@ -596,7 +529,8 @@ app.get('/api/events', authenticateToken, (req, res) => {
                 let signedCover = evt.coverImage;
                 if (evt.coverImage && !evt.coverImage.startsWith('http')) signedCover = getPublicUrl(evt.coverImage);
 
-                return { ...evt, media: mediaWithComments, guestbook, coverImage: signedCover };
+                // Admin or Host always sees PIN
+                return { ...evt, media: mediaWithComments, guestbook, coverImage: signedCover, hasPin: !!evt.pin };
             }));
             res.json(detailedEvents);
         } catch (e) {
@@ -609,6 +543,30 @@ app.get('/api/events/:id', (req, res) => {
     db.get("SELECT * FROM events WHERE id = ?", [req.params.id], async (err, event) => {
         if (err) return res.status(500).json({ error: err.message });
         if (!event) return res.status(404).json({ error: 'Event not found' });
+
+        // SECURITY: Check if user is authorized to see the PIN
+        const authHeader = req.headers['authorization'];
+        const token = authHeader && authHeader.split(' ')[1];
+        let isAuthorized = false;
+
+        if (token) {
+            try {
+                const user = jwt.verify(token, JWT_SECRET);
+                if (user.role === 'ADMIN' || user.id === event.hostId) {
+                    isAuthorized = true;
+                }
+            } catch (e) {
+                // ignore invalid token
+            }
+        }
+
+        const eventResponse = { ...event };
+        if (!isAuthorized) {
+            eventResponse.hasPin = !!eventResponse.pin; // Flag for frontend to show lock screen
+            delete eventResponse.pin; // Remove PIN from response
+        } else {
+            eventResponse.hasPin = !!eventResponse.pin;
+        }
 
         try {
             const media = await new Promise(resolve => db.all("SELECT * FROM media WHERE eventId = ? ORDER BY uploadedAt DESC", [req.params.id], (err, rows) => resolve(rows || [])));
@@ -624,7 +582,7 @@ app.get('/api/events/:id', (req, res) => {
             let signedCover = event.coverImage;
             if (event.coverImage && !event.coverImage.startsWith('http')) signedCover = getPublicUrl(event.coverImage);
 
-            res.json({ ...event, media: mediaWithComments, guestbook, coverImage: signedCover });
+            res.json({ ...eventResponse, media: mediaWithComments, guestbook, coverImage: signedCover });
         } catch (e) {
             res.status(500).json({ error: 'Failed to retrieve event data' });
         }
@@ -633,10 +591,14 @@ app.get('/api/events/:id', (req, res) => {
 
 app.post('/api/events/:id/validate-pin', (req, res) => {
     const { pin } = req.body;
+    // This route is secure because it compares on the server-side
     db.get("SELECT pin FROM events WHERE id = ?", [req.params.id], (err, row) => {
         if (err) return res.status(500).json({ error: err.message });
         if (!row) return res.status(404).json({ error: "Event not found" });
-        res.json({ success: (!row.pin || row.pin === pin) });
+        
+        // If pin matches or if event has no pin (null/empty), return success
+        const isValid = !row.pin || row.pin === pin;
+        res.json({ success: isValid });
     });
 });
 
@@ -715,12 +677,10 @@ app.post('/api/media', upload.single('file'), async (req, res) => {
     const isVideo = body.type === 'video';
     const ext = path.extname(req.file.originalname);
     const s3Key = `events/${body.eventId}/${body.id}${ext}`;
-    // UPDATED SQL: Include uploaderId
     const stmt = db.prepare(`INSERT INTO media (id, eventId, type, url, previewUrl, isProcessing, caption, uploadedAt, uploaderName, uploaderId, isWatermarked, watermarkText, likes, privacy) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
 
     if (!isVideo) {
         try {
-            // GENERATE THUMBNAIL
             const previewFilename = `thumb_${path.parse(req.file.filename).name}.jpg`;
             const previewPath = path.join(uploadDir, previewFilename);
             const previewKey = `events/${body.eventId}/thumb_${body.id}.jpg`;
@@ -737,7 +697,6 @@ app.post('/api/media', upload.single('file'), async (req, res) => {
 
             fs.unlink(previewPath, () => {});
 
-            // Updated: include uploaderId and privacy in run()
             stmt.run(body.id, body.eventId, body.type, s3Key, previewKey, 0, body.caption, body.uploadedAt, body.uploaderName, body.uploaderId || null, body.isWatermarked === 'true' ? 1 : 0, body.watermarkText, 0, body.privacy || 'public', async (err) => {
                 if (err) return res.status(500).json({ error: err.message });
                 
@@ -756,7 +715,7 @@ app.post('/api/media', upload.single('file'), async (req, res) => {
                     uploaderName: body.uploaderName, 
                     likes: 0, 
                     comments: [],
-                    privacy: body.privacy || 'public' // Return it
+                    privacy: body.privacy || 'public'
                 };
                 io.to(body.eventId).emit('media_uploaded', mediaItem);
                 res.json(mediaItem);
@@ -767,15 +726,12 @@ app.post('/api/media', upload.single('file'), async (req, res) => {
             res.status(500).json({ error: e.message }); 
         }
     } else {
-         // Updated: include uploaderId and privacy in run()
         stmt.run(body.id, body.eventId, body.type, s3Key, '', 1, body.caption, body.uploadedAt, body.uploaderName, body.uploaderId || null, body.isWatermarked === 'true' ? 1 : 0, body.watermarkText, 0, body.privacy || 'public', (err) => {
             if (err) return res.status(500).json({ error: err.message });
             const mediaItem = { id: body.id, eventId: body.eventId, url: '', type: body.type, caption: body.caption, isProcessing: true, uploadedAt: body.uploadedAt, uploaderName: body.uploaderName, likes: 0, comments: [], privacy: body.privacy || 'public' };
             io.to(body.eventId).emit('media_uploaded', mediaItem);
             res.json(mediaItem);
 
-            // Create video processing queue manually since we can't use external libs easily in this single file
-            // In a real app, use BullMQ
             const processVideo = async () => {
                 const inputPath = req.file.path;
                 const outputFilename = `preview_${path.parse(req.file.filename).name}.mp4`;
@@ -833,7 +789,6 @@ app.delete('/api/media/:id', authenticateToken, (req, res) => {
         if (err) return res.status(500).json({ error: err.message });
         if (!row) return res.status(404).json({ error: "Media not found" });
 
-        // Allow deletion if user is admin, event host, or the uploader
         const isAuthorized = req.user.role === 'ADMIN' || 
                            row.hostId === req.user.id || 
                            row.uploaderId === req.user.id;

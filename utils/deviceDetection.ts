@@ -1,6 +1,7 @@
 // Device detection utilities
 export const isMobileDevice = (): boolean => {
   // Check for touch support and screen size
+  if (typeof window === 'undefined') return false;
   const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
   const isSmallScreen = window.innerWidth <= 768;
   
@@ -12,17 +13,19 @@ export const isMobileDevice = (): boolean => {
 };
 
 export const isIOS = (): boolean => {
+  if (typeof navigator === 'undefined') return false;
   return /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
 };
 
 export const isAndroid = (): boolean => {
+  if (typeof navigator === 'undefined') return false;
   return /Android/.test(navigator.userAgent);
 };
 
-export const isTablet = (): boolean => {
-  const userAgent = navigator.userAgent.toLowerCase();
-  const isTabletUA = /(tablet|ipad|playbook|silk)|(android(?!.*mobile))/i.test(userAgent);
-  const isLargeScreen = window.innerWidth > 768 && window.innerWidth <= 1024;
-  
-  return isTabletUA || isLargeScreen;
+export const supportsHaptics = (): boolean => {
+    return typeof navigator !== 'undefined' && !!navigator.vibrate;
+};
+
+export const supportsImageCapture = (): boolean => {
+    return typeof window !== 'undefined' && 'ImageCapture' in window;
 };

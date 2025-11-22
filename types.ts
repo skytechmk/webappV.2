@@ -136,6 +136,7 @@ export interface Event {
   coverMediaType?: 'image' | 'video';
   expiresAt: string | null; // ISO String, null = unlimited
   pin?: string; // Optional security PIN
+  hasPin?: boolean; // NEW: Flag to indicate pin existence without revealing it
   // Analytics
   views?: number;
   downloads?: number;

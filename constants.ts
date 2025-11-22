@@ -222,8 +222,6 @@ export const TRANSLATIONS: Record<Language, Record<string, string>> = {
     // PWA Strings
     installApp: "Install App",
     installAppDesc: "Install SnapifY for a better experience.",
-    install: "Install",
-    offlineMode: "You are currently offline",
     // New UI Strings
     addMemory: "Add Memory",
     tapToUpload: "TAP TO UPLOAD",
@@ -475,9 +473,6 @@ export const TRANSLATIONS: Record<Language, Record<string, string>> = {
   tr: {
     // ... existing translations ...
     appSubtitle: "Etkinlik Paylaşım Platformu", // Added this
-    loginHost: "Zaten hesabınız var mı? Giriş Yap",
-    addMemory: "Anı Ekle",
-    tapToUpload: "YÜKLEMEK İÇİN DOKUN",
     appName: "SnapifY",
     heroTitlePrefix: "Partile.",
     heroTitleSuffix: "Anında Çek.",
@@ -937,10 +932,6 @@ export const TRANSLATIONS: Record<Language, Record<string, string>> = {
     installAppDesc: "Instalo SnapifY për një përvojë më të mirë.",
     install: "Instalo",
     offlineMode: "Ju jeni aktualisht offline",
-    // New UI Strings
-    addMemory: "Shto Kujtime",
-    tapToUpload: "PREK PËR TË NGARKUAR",
-    loginHost: "Keni llogari? Hyni",
     // New Modal Strings
     chooseAccess: "Si dëshironi të bashkoheni?",
     guestAccess: "Qasje si Mysafir",
@@ -1005,6 +996,5 @@ export const HERO_IMAGES = [
   "https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&q=80&w=1920", 
   "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&fit=crop&q=80&w=1920", 
   "https://images.unsplash.com/photo-1501281668745-f7f57925c3b4?auto=format&fit=crop&q=80&w=1920", 
-  "https://images.unsplash.com/photo-1513151233558-d860c5398176?auto=format&fit=crop&q=80&w=1920", 
-  "https://images.unsplash.com/photo-1544531586-fde5298cdd40?auto=format&fit=crop&q=80&w=1920"
+  "https://images.unsplash.com/photo-1513151233558-d860c5398176?auto=format&fit=crop&q=80&w=1920"
 ];
