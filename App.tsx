@@ -17,9 +17,11 @@ import { ContactModal } from './components/ContactModal';
 import { GuestLoginModal } from './components/GuestLoginModal';
 import { StudioSettingsModal } from './components/StudioSettingsModal';
 import { MediaReviewModal } from './components/MediaReviewModal';
+import { LiveSlideshow } from './components/LiveSlideshow';
 import { applyWatermark } from './utils/imageProcessing';
 import { api } from './services/api';
-import { getStoredUserId, isKnownDevice } from './utils/deviceFingerprint';
+import { getStoredUserId, isKnownDevice, clearDeviceFingerprint } from './utils/deviceFingerprint';
+import { socketService } from './services/socketService';
 
 // Safe access to env variables
 // @ts-ignore
@@ -33,7 +35,7 @@ declare global {
 
 export default function App() {
   // -- State --
-  const [view, setView] = useState<'landing' | 'dashboard' | 'event' | 'admin'>('landing');
+  const [view, setView] = useState<'landing' | 'dashboard' | 'event' | 'admin' | 'live'>('landing');
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [events, setEvents] = useState<Event[]>([]);
   const [currentEventId, setCurrentEventId] = useState<string | null>(null);
@@ -43,7 +45,7 @@ export default function App() {
   const [language, setLanguage] = useState<Language>('en');
   const [authError, setAuthError] = useState('');
   
-  // Guest Mode State - Initialize from LocalStorage for persistence
+  // Guest Mode State
   const [guestName, setGuestName] = useState(() => localStorage.getItem('snapify_guest_name') || '');
   const [showGuestLogin, setShowGuestLogin] = useState(false);
   const [pendingAction, setPendingAction] = useState<'upload' | 'camera' | null>(null);
@@ -63,6 +65,22 @@ export default function App() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // -- Real-time User Updates --
+  useEffect(() => {
+    if (currentUser) {
+        socketService.connect();
+        const handleUserUpdate = (updatedUser: User) => {
+            if (updatedUser.id === currentUser.id) {
+                setCurrentUser(prev => ({ ...prev!, ...updatedUser }));
+                localStorage.setItem('snapify_user_obj', JSON.stringify({ ...currentUser, ...updatedUser }));
+            }
+            setAllUsers(prev => prev.map(u => u.id === updatedUser.id ? { ...u, ...updatedUser } : u));
+        };
+        socketService.on('user_updated', handleUserUpdate);
+        return () => { socketService.off('user_updated'); };
+    }
+  }, [currentUser?.id]);
+
   // -- Initialization --
   const loadInitialData = async () => {
       try {
@@ -71,6 +89,7 @@ export default function App() {
           
           let currentUserFromStorage: User | null = null;
 
+          // Restore User Session
           if (token && storedUserId) {
               try {
                   const savedUserStr = localStorage.getItem('snapify_user_obj');
@@ -79,23 +98,22 @@ export default function App() {
                       setCurrentUser(currentUserFromStorage);
                   }
 
+                  // Fetch data relative to user
                   const eventsData = await api.fetchEvents();
                   setEvents(eventsData);
                   
-                  // CRITICAL FIX: If Admin, fetch all users immediately
                   if (currentUserFromStorage?.role === UserRole.ADMIN) {
                       const usersData = await api.fetchUsers();
                       setAllUsers(usersData);
                   }
               } catch (e) {
                   console.warn("Session expired or invalid", e);
-                  localStorage.removeItem('snapify_token');
-                  localStorage.removeItem('snapify_user_id');
-                  localStorage.removeItem('snapify_user_obj');
+                  handleLogout(); // Clean cleanup
                   currentUserFromStorage = null;
               }
           }
 
+          // Check URL for Event
           const params = new URLSearchParams(window.location.search);
           const sharedEventId = params.get('event');
           
@@ -103,25 +121,37 @@ export default function App() {
                try {
                    const sharedEvent = await api.fetchEventById(sharedEventId);
                    if (sharedEvent) {
+                       // Add shared event to state if not present
                        setEvents(prev => {
                            if (!prev.find(e => e.id === sharedEventId)) return [...prev, sharedEvent];
                            return prev;
                        });
+                       
+                       // CRITICAL: Prioritize Event View if URL param exists
                        setCurrentEventId(sharedEventId);
-                       setView('event');
+                       setView('event'); 
+                       
                        incrementEventViews(sharedEventId, [sharedEvent]);
                    }
                } catch (error) {
                    console.error("Failed to fetch shared event", error);
+                   // If event fetch fails, fall back to dashboard logic
+                   if (currentUserFromStorage) {
+                       setView(currentUserFromStorage.role === UserRole.ADMIN ? 'admin' : 'dashboard');
+                   }
                }
-          } else if (currentUserFromStorage) {
-              setView(currentUserFromStorage.role === UserRole.ADMIN ? 'admin' : 'dashboard');
           } else {
-              setView('landing');
+              // No shared event in URL -> Route based on auth status
+              if (currentUserFromStorage) {
+                  setView(currentUserFromStorage.role === UserRole.ADMIN ? 'admin' : 'dashboard');
+              } else {
+                  setView('landing');
+              }
           }
 
       } catch (err) {
-          console.error("Failed to load data from backend", err);
+          console.error("Failed to load data", err);
+          setView('landing');
       }
   };
 
@@ -175,7 +205,18 @@ export default function App() {
       
       api.fetchEvents().then(setEvents);
       
-      if (user.role === UserRole.ADMIN) {
+      // Check URL for event parameter first (highest priority)
+      const params = new URLSearchParams(window.location.search);
+      const urlEventId = params.get('event');
+      
+      if (urlEventId) {
+          // If there's an event in URL, redirect to that event
+          setCurrentEventId(urlEventId);
+          setView('event');
+      } else if (currentEventId) {
+          // If we have a current event in state, stay on that event
+          setView('event');
+      } else if (user.role === UserRole.ADMIN) {
           api.fetchUsers().then(setAllUsers);
           setView('admin');
       } else {
@@ -247,6 +288,13 @@ export default function App() {
     if (pendingAction === 'camera') setIsCameraOpen(true);
     else if (pendingAction === 'upload') fileInputRef.current?.click();
     setPendingAction(null);
+  };
+
+  // Redirect guest to full login flow while preserving event context
+  const handleGuestRegister = () => {
+      setShowGuestLogin(false);
+      setView('landing');
+      // currentEventId remains in state, so finalizeLogin will redirect back
   };
 
   const handleCreateEvent = async (data: any) => {
@@ -330,17 +378,23 @@ export default function App() {
   };
 
   const handleUpdateUser = async (updatedUser: User) => {
-      // Recalculate limit based on new tier
       const limit = TIER_CONFIG[updatedUser.tier].storageLimitMb;
       const userWithLimit = { ...updatedUser, storageLimitMb: limit };
-      
       await api.updateUser(userWithLimit);
-      
       setAllUsers(prev => prev.map(u => u.id === updatedUser.id ? userWithLimit : u));
       if (currentUser && currentUser.id === updatedUser.id) {
           setCurrentUser(userWithLimit);
           localStorage.setItem('snapify_user_obj', JSON.stringify(userWithLimit));
       }
+  };
+
+  const handleDeleteMedia = async (eventId: string, mediaId: string) => {
+      await api.deleteMedia(mediaId);
+      setEvents(prev => prev.map(event => 
+          event.id === eventId 
+              ? { ...event, media: event.media.filter(media => media.id !== mediaId) }
+              : event
+      ));
   };
 
   const handleUpdateStudioSettings = async (updates: Partial<User>) => {
@@ -364,11 +418,9 @@ export default function App() {
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || !e.target.files[0] || !activeEvent) return;
-    
     const file = e.target.files[0];
     const type = file.type.startsWith('video') ? 'video' : 'image';
     const url = URL.createObjectURL(file);
-
     setPreviewMedia({ type, src: url, file });
   };
 
@@ -378,15 +430,12 @@ export default function App() {
     setPreviewMedia({ type: 'image', src: imageSrc });
   };
 
-  const confirmUpload = async (userCaption: string) => {
+  const confirmUpload = async (userCaption: string, userPrivacy: 'public' | 'private') => {
     if (!activeEvent || !previewMedia) return;
-    
     setIsUploading(true);
-    
     try {
         const { type, src, file } = previewMedia;
         const uploader = currentUser ? (currentUser.studioName || currentUser.name) : guestName || "Guest";
-        
         const fileSizeMb = file ? file.size / (1024 * 1024) : (src.length * (3/4)) / (1024*1024);
         
         if (currentUser) {
@@ -396,7 +445,6 @@ export default function App() {
                 return;
             }
         }
-
         if (type === 'video' && currentUser) {
             const config = getTierConfigForUser(currentUser);
             if (!config.allowVideo) {
@@ -405,31 +453,19 @@ export default function App() {
                 return;
             }
         }
-
         let finalCaption = userCaption;
         if (!finalCaption && type === 'image') {
              finalCaption = await generateImageCaption(src);
         }
-
         const config = currentUser ? getTierConfigForUser(currentUser) : TIER_CONFIG[TierLevel.FREE];
         const canWatermark = currentUser?.role === UserRole.PHOTOGRAPHER && config.allowWatermark;
         const shouldWatermark = applyWatermarkState && canWatermark;
-
         let uploadFile = file;
         
         if ((shouldWatermark && type === 'image' && currentUser) || (!file && type === 'image')) {
              let source = src;
              if (shouldWatermark && currentUser) {
-                source = await applyWatermark(
-                     src, 
-                     currentUser.studioName || null,
-                     currentUser.logoUrl || null,
-                     currentUser.watermarkOpacity,
-                     currentUser.watermarkSize,
-                     currentUser.watermarkPosition,
-                     currentUser.watermarkOffsetX,
-                     currentUser.watermarkOffsetY
-                );
+                source = await applyWatermark(src, currentUser.studioName || null, currentUser.logoUrl || null, currentUser.watermarkOpacity, currentUser.watermarkSize, currentUser.watermarkPosition, currentUser.watermarkOffsetX, currentUser.watermarkOffsetY);
              }
              const res = await fetch(source);
              const blob = await res.blob();
@@ -442,46 +478,27 @@ export default function App() {
             caption: finalCaption,
             uploadedAt: new Date().toISOString(),
             uploaderName: uploader,
+            // NEW: Include uploaderId for guest tracking
+            uploaderId: currentUser ? currentUser.id : `guest-${guestName}-${Date.now()}`,
             isWatermarked: shouldWatermark,
-            watermarkText: currentUser?.studioName
+            watermarkText: currentUser?.studioName,
+            privacy: userPrivacy
         };
 
         if (uploadFile) {
             await api.uploadMedia(uploadFile, metadata, activeEvent.id);
         }
-
         if (currentUser) {
             updateUserStorage(currentUser.id, fileSizeMb);
         }
-
         setPreviewMedia(null);
         if (fileInputRef.current) fileInputRef.current.value = '';
-
     } catch (e) {
         console.error("Upload failed", e);
         alert("Upload failed. Please try again.");
     } finally {
         setIsUploading(false);
     }
-  };
-
-  const updateUserStorage = async (userId: string, mb: number) => {
-     const user = allUsers.find(u => u.id === userId) || currentUser;
-     if (user && user.id === userId) {
-         const newUsed = user.storageUsedMb + mb;
-         const updated = { ...user, storageUsedMb: newUsed };
-         try {
-            await api.updateUser(updated);
-            if (currentUser && currentUser.id === userId) setCurrentUser(updated);
-         } catch (e) {
-             console.error("Failed to update storage stats", e);
-         }
-     }
-  };
-
-  const handleDeleteMedia = async (eventId: string, mediaId: string) => {
-      await api.deleteMedia(mediaId);
-      setEvents(prev => prev.map(e => e.id === eventId ? { ...e, media: e.media.filter(m => m.id !== mediaId) } : e));
   };
 
   const downloadEventZip = async (targetEvent: Event) => {
@@ -502,7 +519,6 @@ export default function App() {
               reader.onloadend = () => resolve(reader.result as string);
               reader.readAsDataURL(blob);
           });
-
           for (const item of targetEvent.media) {
               const filename = `${item.id}.${item.type === 'video' ? 'mp4' : 'jpg'}`;
               if (!item.url) continue;
@@ -536,11 +552,25 @@ export default function App() {
   };
 
   const handleLogout = () => {
+      // 1. Reset state immediately
       setCurrentUser(null);
+      setGuestName('');
       setView('landing');
+      setCurrentEventId(null);
+      
+      // 2. Clear storage
       localStorage.removeItem('snapify_token');
       localStorage.removeItem('snapify_user_id');
       localStorage.removeItem('snapify_user_obj');
+      localStorage.removeItem('snapify_guest_name');
+      clearDeviceFingerprint();
+      
+      // 3. Clean URL
+      const url = new URL(window.location.href);
+      if (url.searchParams.has('event')) {
+          url.searchParams.delete('event');
+          window.history.replaceState({}, '', url.toString());
+      }
   };
 
   const handleBack = () => {
@@ -549,6 +579,19 @@ export default function App() {
           setView(currentUser ? (currentUser.role === UserRole.ADMIN ? 'admin' : 'dashboard') : 'landing');
       } else if (view === 'dashboard' || view === 'admin') {
           handleLogout();
+      }
+  };
+
+  const updateUserStorage = async (userId: string, fileSizeMb: number) => {
+      const user = allUsers.find(u => u.id === userId);
+      if (user) {
+          const updatedUser = { ...user, storageUsedMb: user.storageUsedMb + fileSizeMb };
+          await api.updateUser(updatedUser);
+          setAllUsers(prev => prev.map(u => u.id === userId ? updatedUser : u));
+          if (currentUser && currentUser.id === userId) {
+              setCurrentUser(updatedUser);
+              localStorage.setItem('snapify_user_obj', JSON.stringify(updatedUser));
+          }
       }
   };
 
@@ -615,6 +658,7 @@ export default function App() {
               currentUser={currentUser}
               onNewEvent={() => setShowCreateModal(true)}
               onSelectEvent={(id) => { setCurrentEventId(id); setView('event'); }}
+              onRequestUpgrade={() => setShowContactModal(true)}
               t={t}
             />
         )}
@@ -634,6 +678,15 @@ export default function App() {
               onSetCover={handleSetCoverImage}
               onUpload={initiateMediaAction}
               onLike={handleLikeMedia}
+              onOpenLiveSlideshow={() => setView('live')}
+              t={t}
+            />
+        )}
+
+        {view === 'live' && activeEvent && (
+            <LiveSlideshow 
+              event={activeEvent}
+              onClose={() => setView('event')}
               t={t}
             />
         )}
@@ -653,13 +706,14 @@ export default function App() {
             }}
             onCancel={() => setPreviewMedia(null)}
             isUploading={isUploading}
+            isRegistered={!!currentUser}
             t={t}
         />
       )}
 
       {isCameraOpen && !previewMedia && <CameraCapture onClose={() => setIsCameraOpen(false)} onCapture={handleCameraCapture} t={t} />}
       {showContactModal && <ContactModal onClose={() => setShowContactModal(false)} t={t} />}
-      {showGuestLogin && <GuestLoginModal onLogin={handleGuestLogin} onCancel={() => setShowGuestLogin(false)} t={t} />}
+      {showGuestLogin && <GuestLoginModal onLogin={handleGuestLogin} onRegister={handleGuestRegister} onCancel={() => setShowGuestLogin(false)} t={t} />}
       {showCreateModal && currentUser && <CreateEventModal currentUser={currentUser} onClose={() => setShowCreateModal(false)} onCreate={handleCreateEvent} t={t} />}
       {showStudioSettings && currentUser && <StudioSettingsModal currentUser={currentUser} onClose={() => setShowStudioSettings(false)} onSave={handleUpdateStudioSettings} t={t} />}
     </div>

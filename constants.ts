@@ -2,6 +2,7 @@ import { Language, TierLevel, PricingTier, TranslateFn } from './types';
 
 export const TRANSLATIONS: Record<Language, Record<string, string>> = {
   en: {
+    // ... existing translations ...
     appName: "SnapifY",
     heroTitlePrefix: "Relive the Magic,",
     heroTitleSuffix: "Forever Yours",
@@ -96,7 +97,6 @@ export const TRANSLATIONS: Record<Language, Record<string, string>> = {
     managing: "Managing",
     mediaItems: "media items",
     noMedia: "No media in this event",
-    deleteMediaConfirm: "Delete this item?",
     deleteEventConfirm: "Delete this event and all its media permanently?",
     cameraError: "Unable to access camera. Please check permissions.",
     takePhoto: "Take Photo",
@@ -200,9 +200,27 @@ export const TRANSLATIONS: Record<Language, Record<string, string>> = {
     contactUsText: "For data deletion requests, privacy concerns, or legal inquiries, please contact the Data Protection Officer / Administrator at:",
     agreeFooter: "By using SnapifY, you agree to these terms.",
     iAgree: "I Understand & Agree",
-    termsLink: "Terms & Privacy"
+    termsLink: "Terms & Privacy",
+    loginForPrivacy: "Login for Privacy Control",
+    privacyNote: "Register to enable Private Uploads and manage your history.",
+    guestPublicNote: "Photos uploaded as a guest will be public.",
+    private: "Private",
+    public: "Public",
+    loginRequired: "Login required for private uploads",
+    uploadPrivacy: "Upload Privacy",
+    // --- NEW TRANSLATIONS ---
+    myUploads: "My Uploads",
+    allPhotos: "All Photos",
+    deleteMediaConfirm: "Are you sure you want to delete this media? This cannot be undone.",
+    liveWall: "Live Wall",
+    shareLiveWall: "Share Live Wall",
+    scanToView: "Scan to view this live wall",
+    untitled: "Untitled",
+    by: "by",
+    close: "Close"
   },
   mk: {
+     // ... existing translations ...
     appName: "SnapifY",
     heroTitlePrefix: "Забавувај се.",
     heroTitleSuffix: "Сликај веднаш.",
@@ -297,7 +315,6 @@ export const TRANSLATIONS: Record<Language, Record<string, string>> = {
     managing: "Управување",
     mediaItems: "медиумски ставки",
     noMedia: "Нема медиуми во овој настан",
-    deleteMediaConfirm: "Избриши ја оваа ставка?",
     deleteEventConfirm: "Избриши го настанот трајно?",
     cameraError: "Нема пристап до камерата.",
     takePhoto: "Сликај",
@@ -401,9 +418,27 @@ export const TRANSLATIONS: Record<Language, Record<string, string>> = {
     contactUsText: "За барања за бришење податоци, проблеми со приватноста или правни прашања, ве молиме контактирајте го Службеникот за заштита на податоци / Администраторот на:",
     agreeFooter: "Со користење на SnapifY, се согласувате со овие услови.",
     iAgree: "Разбирам и се согласувам",
-    termsLink: "Услови и Приватност"
+    termsLink: "Услови и Приватност",
+    loginForPrivacy: "Најави се за Приватност",
+    privacyNote: "Регистрирај се за да користиш приватни прикачувања и историја.",
+    guestPublicNote: "Сликите прикачени како гостин се јавни.",
+    private: "Приватно",
+    public: "Јавно",
+    loginRequired: "Потребна е најава за приватност",
+    uploadPrivacy: "Приватност на прикачување",
+    // --- NEW TRANSLATIONS ---
+    myUploads: "Мои прикачувања",
+    allPhotos: "Сите фотографии",
+    deleteMediaConfirm: "Дали сте сигурни дека сакате да го избришете овој медиум?",
+    liveWall: "Жив Зид",
+    shareLiveWall: "Сподели Жив Зид",
+    scanToView: "Скенирај за да го видиш овој жив зид",
+    untitled: "Без наслов",
+    by: "од",
+    close: "Затвори"
   },
   tr: {
+    // ... existing translations ...
     appName: "SnapifY",
     heroTitlePrefix: "Partile.",
     heroTitleSuffix: "Anında Çek.",
@@ -498,7 +533,6 @@ export const TRANSLATIONS: Record<Language, Record<string, string>> = {
     managing: "Yönetiliyor",
     mediaItems: "medya öğesi",
     noMedia: "Bu etkinlikte medya yok",
-    deleteMediaConfirm: "Bu öğeyi sil?",
     deleteEventConfirm: "Bu etkinliği kalıcı olarak sil?",
     cameraError: "Kameraya erişilemiyor. İzinleri kontrol edin.",
     takePhoto: "Fotoğraf Çek",
@@ -602,9 +636,27 @@ export const TRANSLATIONS: Record<Language, Record<string, string>> = {
     contactUsText: "Veri silme talepleri, gizlilik endişeleri veya yasal sorular için lütfen Veri Koruma Görevlisi / Yönetici ile şu adresten iletişime geçin:",
     agreeFooter: "SnapifY'ı kullanarak, bu şartları kabul etmiş olursunuz.",
     iAgree: "Anlıyorum ve Kabul Ediyorum",
-    termsLink: "Şartlar ve Gizlilik"
+    termsLink: "Şartlar ve Gizlilik",
+    loginForPrivacy: "Gizlilik Kontrolü için Giriş Yapın",
+    privacyNote: "Özel Yüklemeleri etkinleştirmek ve geçmişinizi yönetmek için kaydolun.",
+    guestPublicNote: "Misafir olarak yüklenen fotoğraflar herkese açık olacaktır.",
+    private: "Özel",
+    public: "Genel",
+    loginRequired: "Özel yüklemeler için giriş gerekli",
+    uploadPrivacy: "Yükleme Gizliliği",
+    // --- NEW TRANSLATIONS ---
+    myUploads: "Yüklemelerim",
+    allPhotos: "Tüm Fotoğraflar",
+    deleteMediaConfirm: "Bu medyayı silmek istediğinizden emin misiniz?",
+    liveWall: "Canlı Duvar",
+    shareLiveWall: "Canlı Duvarı Paylaş",
+    scanToView: "Bu canlı duvarı görmek için tarayın",
+    untitled: "Başlıksız",
+    by: "tarafından",
+    close: "Kapat"
   },
   sq: {
+    // ... existing translations ...
     appName: "SnapifY",
     heroTitlePrefix: "Festo Fort.",
     heroTitleSuffix: "Shkrep Tani.",
@@ -699,7 +751,6 @@ export const TRANSLATIONS: Record<Language, Record<string, string>> = {
     managing: "Duke menaxhuar",
     mediaItems: "artikuj media",
     noMedia: "Asnjë media në këtë ngjarje",
-    deleteMediaConfirm: "Fshi këtë artikull?",
     deleteEventConfirm: "Fshi këtë ngjarje përgjithmonë?",
     cameraError: "Nuk mund të qaset kamera.",
     takePhoto: "Bëj Foto",
@@ -803,7 +854,24 @@ export const TRANSLATIONS: Record<Language, Record<string, string>> = {
     contactUsText: "Për kërkesa për fshirjen e të dhënave, shqetësime për privatësinë ose pyetje ligjore, ju lutemi kontaktoni Zyrtarin për Mbrojtjen e të Dhënave / Administratorin në:",
     agreeFooter: "Duke përdorur SnapifY, ju pajtoheni me këto kushte.",
     iAgree: "Kuptoj dhe Pajtohem",
-    termsLink: "Kushtet dhe Privatësia"
+    termsLink: "Kushtet dhe Privatësia",
+    loginForPrivacy: "Hyni për Kontrollin e Privatësisë",
+    privacyNote: "Regjistrohuni për të aktivizuar Ngarkimet Private dhe për të menaxhuar historinë tuaj.",
+    guestPublicNote: "Fotot e ngarkuara si mysafir do të jenë publike.",
+    private: "Private",
+    public: "Publike",
+    loginRequired: "Kërkohet hyrja për ngarkime private",
+    uploadPrivacy: "Privatësia e Ngarkimit",
+    // --- NEW TRANSLATIONS ---
+    myUploads: "Ngarkimet e Mia",
+    allPhotos: "Të Gjitha Fotot",
+    deleteMediaConfirm: "A jeni i sigurt se doni të fshini këtë media?",
+    liveWall: "Mur i Gjallë",
+    shareLiveWall: "Ndaj Murin e Gjallë",
+    scanToView: "Skano për të parë këtë mur të gjallë",
+    untitled: "Pa Titull",
+    by: "nga",
+    close: "Mbyll"
   }
 };
 
@@ -846,10 +914,16 @@ export const EVENT_THEMES = [
   { id: 'Birthday', label: 'Birthday', emoji: '🎂' },
   { id: 'Wedding', label: 'Wedding', emoji: '💍' },
   { id: 'Party', label: 'Party', emoji: '🎉' },
-  { id: 'Trip', label: 'Trip', emoji: '✈️' },
-  { id: 'Other', label: 'Other', emoji: '✨' },
+  { id: 'Corporate', label: 'Corporate', emoji: '💼' },
+  { id: 'Graduation', label: 'Graduation', emoji: '🎓' },
+  { id: 'Baby Shower', label: 'Baby Shower', emoji: '👶' },
+  { id: 'Anniversary', label: 'Anniversary', emoji: '💝' },
+  { id: 'Holiday', label: 'Holiday', emoji: '🎄' },
+  { id: 'Sports', label: 'Sports', emoji: '⚽' },
+  { id: 'Concert', label: 'Concert', emoji: '🎵' }
 ];
 
+// Hero images for landing page
 export const HERO_IMAGES = [
   "https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&q=80&w=1920", 
   "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&fit=crop&q=80&w=1920", 

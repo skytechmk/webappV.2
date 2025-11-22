@@ -1,11 +1,9 @@
 import { GoogleGenAI } from "@google/genai";
+import { generateEventDescriptionWithOllama, generateImageCaptionWithOllama, isOllamaAvailable } from './ollamaService';
 
 // Safe access to env variables for environments where import.meta.env might be undefined
 // @ts-ignore
 const env: any = import.meta.env || {};
-
-const OLLAMA_BASE_URL = env.VITE_OLLAMA_URL || 'http://192.168.20.30:11434';
-const OLLAMA_MODEL = env.VITE_OLLAMA_MODEL || 'phi4:latest';
 
 const getAiClient = () => {
   // API Key must be obtained exclusively from process.env.API_KEY
@@ -20,32 +18,8 @@ const getAiClient = () => {
 export const generateEventDescription = async (title: string, date: string, type: string): Promise<string> => {
   // Attempt to use local Ollama instance first
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3000); 
-
-    const response = await fetch(`${OLLAMA_BASE_URL}/api/generate`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: OLLAMA_MODEL,
-        prompt: `Write a short, exciting, and inviting description (max 2 sentences) for a ${type} event named "${title}" happening on ${date}. Use emojis. Do not include quotes.`,
-        stream: false,
-        options: {
-          temperature: 0.8
-        }
-      }),
-      signal: controller.signal
-    });
-
-    clearTimeout(timeoutId);
-
-    if (response.ok) {
-      const data = await response.json();
-      if (data.response) {
-        return data.response.trim().replace(/^"|"$/g, '');
-      }
+    if (await isOllamaAvailable()) {
+      return await generateEventDescriptionWithOllama(title, date, type);
     }
   } catch (error) {
     // Silent fail for Ollama
@@ -68,6 +42,16 @@ export const generateEventDescription = async (title: string, date: string, type
 };
 
 export const generateImageCaption = async (base64Image: string): Promise<string> => {
+  // Attempt to use local Ollama instance first
+  try {
+    if (await isOllamaAvailable()) {
+      return await generateImageCaptionWithOllama(base64Image);
+    }
+  } catch (error) {
+    // Silent fail for Ollama
+  }
+
+  // Fallback to Gemini
   const ai = getAiClient();
   if (!ai) return "Event memory";
 

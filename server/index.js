@@ -26,6 +26,7 @@ const PORT = process.env.PORT || 3001;
 const ADMIN_EMAIL = process.env.VITE_ADMIN_EMAIL || 'admin@skytech.mk';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123'; 
 const JWT_SECRET = process.env.JWT_SECRET || 'change_this_in_production_secure_random_string';
+const JWT_EXPIRY = '365d'; // CHANGED: Extended session to 1 year
 
 // Domain Management
 const ALLOWED_ORIGINS = process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : '*';
@@ -104,6 +105,7 @@ const db = new sqlite3.Database(dbPath, (err) => {
 
 // Initialize Tables
 db.serialize(() => {
+    // ... existing users table ...
     db.run(`CREATE TABLE IF NOT EXISTS users (
         id TEXT PRIMARY KEY,
         name TEXT,
@@ -149,6 +151,23 @@ db.serialize(() => {
         FOREIGN KEY(hostId) REFERENCES users(id) ON DELETE CASCADE
     )`);
     
+    // MIGRATION: Check if privacy column exists, if not add it
+    db.all("PRAGMA table_info(media)", (err, rows) => {
+        if (err) return;
+        const hasPrivacy = rows.some(row => row.name === 'privacy');
+        if (!hasPrivacy) {
+            console.log("Migrating media table: Adding privacy column...");
+            db.run("ALTER TABLE media ADD COLUMN privacy TEXT DEFAULT 'public'");
+        }
+        
+        // MIGRATION: Check if uploaderId column exists, if not add it
+        const hasUploaderId = rows.some(row => row.name === 'uploaderId');
+        if (!hasUploaderId) {
+            console.log("Migrating media table: Adding uploaderId column...");
+            db.run("ALTER TABLE media ADD COLUMN uploaderId TEXT");
+        }
+    });
+
     db.run(`CREATE TABLE IF NOT EXISTS media (
         id TEXT PRIMARY KEY,
         eventId TEXT,
@@ -162,6 +181,7 @@ db.serialize(() => {
         isWatermarked INTEGER,
         watermarkText TEXT,
         likes INTEGER DEFAULT 0,
+        privacy TEXT DEFAULT 'public',
         FOREIGN KEY(eventId) REFERENCES events(id) ON DELETE CASCADE
     )`);
     
@@ -185,6 +205,7 @@ db.serialize(() => {
     )`);
 });
 
+// ... (Rest of the file: File Upload Middleware, VideoQueue, S3 Helpers, Proxy Route) ...
 // File Upload Middleware
 const storage = multer.diskStorage({
     destination: (req, file, cb) => cb(null, uploadDir),
@@ -194,29 +215,6 @@ const storage = multer.diskStorage({
     }
 });
 const upload = multer({ storage: storage });
-
-// Video Queue
-class VideoQueue {
-    constructor(concurrency = 1) {
-        this.queue = [];
-        this.active = 0;
-        this.concurrency = concurrency;
-    }
-    add(task) {
-        this.queue.push(task);
-        this.process();
-    }
-    process() {
-        if (this.active >= this.concurrency || this.queue.length === 0) return;
-        this.active++;
-        const task = this.queue.shift();
-        task().finally(() => {
-            this.active--;
-            this.process();
-        });
-    }
-}
-const videoQueue = new VideoQueue(1);
 
 // S3 Helpers
 async function uploadToS3(filePath, key, contentType) {
@@ -297,7 +295,7 @@ app.post('/api/auth/login', (req, res) => {
             id: 'admin-system-id', 
             role: 'ADMIN', 
             email: ADMIN_EMAIL 
-        }, JWT_SECRET, { expiresIn: '24h' });
+        }, JWT_SECRET, { expiresIn: JWT_EXPIRY });
         
         const adminUser = {
             id: 'admin-system-id',
@@ -328,7 +326,7 @@ app.post('/api/auth/login', (req, res) => {
             id: user.id, 
             role: user.role, 
             email: user.email 
-        }, JWT_SECRET, { expiresIn: '7d' });
+        }, JWT_SECRET, { expiresIn: JWT_EXPIRY });
 
         res.json({ token, user });
     });
@@ -358,7 +356,7 @@ app.post('/api/auth/google', (req, res) => {
                 id: row.id, 
                 role: row.role, 
                 email: row.email 
-            }, JWT_SECRET, { expiresIn: '7d' });
+            }, JWT_SECRET, { expiresIn: JWT_EXPIRY });
             return res.json({ token, user: row });
         } else {
             console.log("User not found, creating new:", normalizedEmail);
@@ -373,7 +371,7 @@ app.post('/api/auth/google', (req, res) => {
                     id: newId, 
                     role: safeRole, 
                     email: email 
-                }, JWT_SECRET, { expiresIn: '7d' });
+                }, JWT_SECRET, { expiresIn: JWT_EXPIRY });
 
                 const newUser = { 
                     id: newId, name, email, role: safeRole, tier: safeTier, 
@@ -386,6 +384,7 @@ app.post('/api/auth/google', (req, res) => {
     });
 });
 
+// ... (Admin/User/Event routes unchanged) ...
 // --- ADMIN ACTIONS ---
 
 app.post('/api/admin/reset', authenticateToken, async (req, res) => {
@@ -465,7 +464,7 @@ app.post('/api/users', (req, res) => {
                     id: user.id, 
                     role: safeRole, 
                     email: user.email 
-                }, JWT_SECRET, { expiresIn: '7d' });
+                }, JWT_SECRET, { expiresIn: JWT_EXPIRY });
 
                 const newUser = { ...user, role: safeRole, tier: safeTier, storageUsedMb: 0, storageLimitMb: safeStorageLimit };
                 res.json({ token, user: newUser });
@@ -496,6 +495,10 @@ app.put('/api/users/:id', authenticateToken, (req, res) => {
         const stmt = db.prepare(`UPDATE users SET name=?, role=?, tier=?, storageUsedMb=?, storageLimitMb=?, studioName=?, logoUrl=?, watermarkOpacity=?, watermarkSize=?, watermarkPosition=?, watermarkOffsetX=?, watermarkOffsetY=? WHERE id=?`);
         stmt.run(u.name, u.role, u.tier, u.storageUsedMb, u.storageLimitMb, u.studioName, u.logoUrl, u.watermarkOpacity, u.watermarkSize, u.watermarkPosition, u.watermarkOffsetX, u.watermarkOffsetY, targetId, (err) => {
             if (err) return res.status(500).json({ error: err.message });
+            
+            // Broadcast update to all clients so the user sees changes immediately
+            io.emit('user_updated', { ...u, id: targetId });
+            
             res.json({ success: true });
         });
         stmt.finalize();
@@ -661,7 +664,8 @@ app.post('/api/media', upload.single('file'), async (req, res) => {
     const isVideo = body.type === 'video';
     const ext = path.extname(req.file.originalname);
     const s3Key = `events/${body.eventId}/${body.id}${ext}`;
-    const stmt = db.prepare(`INSERT INTO media (id, eventId, type, url, previewUrl, isProcessing, caption, uploadedAt, uploaderName, isWatermarked, watermarkText, likes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    // UPDATED SQL: Include uploaderId
+    const stmt = db.prepare(`INSERT INTO media (id, eventId, type, url, previewUrl, isProcessing, caption, uploadedAt, uploaderName, uploaderId, isWatermarked, watermarkText, likes, privacy) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
 
     if (!isVideo) {
         try {
@@ -682,7 +686,8 @@ app.post('/api/media', upload.single('file'), async (req, res) => {
 
             fs.unlink(previewPath, () => {});
 
-            stmt.run(body.id, body.eventId, body.type, s3Key, previewKey, 0, body.caption, body.uploadedAt, body.uploaderName, body.isWatermarked === 'true' ? 1 : 0, body.watermarkText, 0, async (err) => {
+            // Updated: include uploaderId and privacy in run()
+            stmt.run(body.id, body.eventId, body.type, s3Key, previewKey, 0, body.caption, body.uploadedAt, body.uploaderName, body.uploaderId || null, body.isWatermarked === 'true' ? 1 : 0, body.watermarkText, 0, body.privacy || 'public', async (err) => {
                 if (err) return res.status(500).json({ error: err.message });
                 
                 const publicUrl = getPublicUrl(s3Key);
@@ -699,7 +704,8 @@ app.post('/api/media', upload.single('file'), async (req, res) => {
                     uploadedAt: body.uploadedAt, 
                     uploaderName: body.uploaderName, 
                     likes: 0, 
-                    comments: [] 
+                    comments: [],
+                    privacy: body.privacy || 'public' // Return it
                 };
                 io.to(body.eventId).emit('media_uploaded', mediaItem);
                 res.json(mediaItem);
@@ -710,9 +716,10 @@ app.post('/api/media', upload.single('file'), async (req, res) => {
             res.status(500).json({ error: e.message }); 
         }
     } else {
-        stmt.run(body.id, body.eventId, body.type, s3Key, '', 1, body.caption, body.uploadedAt, body.uploaderName, body.isWatermarked === 'true' ? 1 : 0, body.watermarkText, 0, (err) => {
+         // Updated: include uploaderId and privacy in run()
+        stmt.run(body.id, body.eventId, body.type, s3Key, '', 1, body.caption, body.uploadedAt, body.uploaderName, body.uploaderId || null, body.isWatermarked === 'true' ? 1 : 0, body.watermarkText, 0, body.privacy || 'public', (err) => {
             if (err) return res.status(500).json({ error: err.message });
-            const mediaItem = { id: body.id, eventId: body.eventId, url: '', type: body.type, caption: body.caption, isProcessing: true, uploadedAt: body.uploadedAt, uploaderName: body.uploaderName, likes: 0, comments: [] };
+            const mediaItem = { id: body.id, eventId: body.eventId, url: '', type: body.type, caption: body.caption, isProcessing: true, uploadedAt: body.uploadedAt, uploaderName: body.uploaderName, likes: 0, comments: [], privacy: body.privacy || 'public' };
             io.to(body.eventId).emit('media_uploaded', mediaItem);
             res.json(mediaItem);
 
@@ -761,7 +768,7 @@ app.put('/api/media/:id/like', (req, res) => {
 
 app.delete('/api/media/:id', authenticateToken, (req, res) => {
     const query = `
-        SELECT media.url, media.previewUrl, events.hostId 
+        SELECT media.url, media.previewUrl, events.hostId, media.uploaderId 
         FROM media 
         JOIN events ON media.eventId = events.id 
         WHERE media.id = ?
@@ -771,7 +778,12 @@ app.delete('/api/media/:id', authenticateToken, (req, res) => {
         if (err) return res.status(500).json({ error: err.message });
         if (!row) return res.status(404).json({ error: "Media not found" });
 
-        if (row.hostId !== req.user.id && req.user.role !== 'ADMIN') {
+        // Allow deletion if user is admin, event host, or the uploader
+        const isAuthorized = req.user.role === 'ADMIN' || 
+                           row.hostId === req.user.id || 
+                           row.uploaderId === req.user.id;
+        
+        if (!isAuthorized) {
             return res.sendStatus(403);
         }
 

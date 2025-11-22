@@ -1,12 +1,13 @@
 import React from 'react';
-import { Plus, Sparkles, Zap, Clock, Calendar, Image as ImageIcon, User } from 'lucide-react';
-import { Event, User as UserType, UserRole, TranslateFn } from '../types';
+import { Plus, Sparkles, Zap, Clock, Calendar, Image as ImageIcon, User as UserIcon, Crown } from 'lucide-react';
+import { Event, User, TranslateFn, TierLevel, UserRole } from '../types';
 
 interface UserDashboardProps {
   events: Event[];
-  currentUser: UserType;
+  currentUser: User;
   onNewEvent: () => void;
   onSelectEvent: (id: string) => void;
+  onRequestUpgrade: () => void;
   t: TranslateFn;
 }
 
@@ -15,25 +16,51 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   currentUser,
   onNewEvent,
   onSelectEvent,
+  onRequestUpgrade,
   t
 }) => {
+  
+  // Helper to render the "Upgrade" button for free tier users
+  const renderUpgradeButton = () => {
+    if (currentUser.tier !== TierLevel.FREE) return null;
+
+    return (
+      <button 
+        onClick={onRequestUpgrade}
+        className="w-full sm:w-auto bg-gradient-to-r from-amber-200 to-yellow-400 text-amber-900 px-5 py-2.5 rounded-xl font-bold flex items-center justify-center space-x-2 hover:shadow-lg hover:scale-[1.02] transition-all"
+        title="Upgrade your plan"
+      >
+        <Crown size={20} />
+        <span>{t('contactSales')}</span>
+      </button>
+    );
+  };
+
   return (
     <main className="max-w-5xl mx-auto px-4 py-8">
+      {/* Header Section */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end mb-8 gap-4">
         <div>
           <h2 className="text-2xl font-bold text-slate-900">{t('myEvents')}</h2>
           <p className="text-slate-500">{t('manageEvents')}</p>
         </div>
-        <button 
-          onClick={onNewEvent}
-          className="w-full sm:w-auto bg-black text-white px-5 py-2.5 rounded-xl font-medium flex items-center justify-center space-x-2 hover:bg-slate-800 transition-all shadow-lg hover:shadow-xl"
-        >
-          <Plus size={20} />
-          <span>{t('newEvent')}</span>
-        </button>
+        
+        <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+          {renderUpgradeButton()}
+          
+          <button 
+            onClick={onNewEvent}
+            className="w-full sm:w-auto bg-black text-white px-5 py-2.5 rounded-xl font-medium flex items-center justify-center space-x-2 hover:bg-slate-800 transition-all shadow-lg hover:shadow-xl"
+          >
+            <Plus size={20} />
+            <span>{t('newEvent')}</span>
+          </button>
+        </div>
       </div>
 
+      {/* Content Section */}
       {events.length === 0 ? (
+        // Empty State
         <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-slate-300 shadow-sm mx-4 sm:mx-0">
           <div className="bg-indigo-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6">
             <Sparkles className="text-indigo-500" size={32} />
@@ -48,6 +75,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
           </button>
         </div>
       ) : (
+        // Events Grid
         <div className="grid md:grid-cols-2 gap-6">
           {events.map(evt => {
             const expired = evt.expiresAt ? new Date() > new Date(evt.expiresAt) : false;
@@ -81,7 +109,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                     {/* Admin View: Show if event belongs to another user */}
                     {!isOwned && currentUser.role === UserRole.ADMIN && (
                          <span className="bg-amber-100 text-amber-700 px-3 py-1 rounded-full text-xs font-bold border border-amber-200 flex items-center">
-                            <User size={10} className="mr-1" /> User Event
+                            <UserIcon size={10} className="mr-1" /> User Event
                          </span>
                     )}
                   </div>

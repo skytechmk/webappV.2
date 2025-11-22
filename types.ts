@@ -107,10 +107,12 @@ export interface MediaItem {
   caption?: string; // AI Generated
   uploadedAt: string;
   uploaderName: string;
+  uploaderId?: string; // Added: To track ownership for guests/users
   isWatermarked?: boolean;
   watermarkText?: string;
   likes?: number; // Enhanced Feature: Social Reaction
   comments?: Comment[]; // Enhanced Feature: Comments
+  privacy: 'public' | 'private'; 
 }
 
 export interface GuestbookEntry {

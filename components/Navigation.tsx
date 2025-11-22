@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Zap, Globe, Briefcase, Camera, User as UserIcon, LogOut, Settings, ChevronLeft, Shield, LogIn } from 'lucide-react';
+import { Zap, Globe, Briefcase, Camera, User as UserIcon, LogOut, Settings, ChevronLeft, Shield, LogIn, Crown } from 'lucide-react';
 import { User, UserRole, Language, TranslateFn, TierLevel } from '../types';
 
 interface NavigationProps {
@@ -35,6 +35,29 @@ export const Navigation: React.FC<NavigationProps> = ({
   const canAccessSettings = currentUser && (currentUser.tier === TierLevel.STUDIO || currentUser.tier === TierLevel.PRO || currentUser.role === UserRole.PHOTOGRAPHER);
 
   const isEventView = view === 'event';
+
+  // Helper to render tier badge
+  const renderTierBadge = (tier: TierLevel) => {
+    if (tier === TierLevel.FREE) return null;
+    
+    let badgeColor = 'bg-indigo-100 text-indigo-700 border-indigo-200';
+    let icon = null;
+
+    if (tier === TierLevel.STUDIO) {
+        badgeColor = 'bg-gradient-to-r from-amber-200 to-yellow-400 text-amber-900 border-amber-300 shadow-sm';
+        icon = <Crown size={10} className="mr-1 fill-amber-700" />;
+    } else if (tier === TierLevel.PRO) {
+        badgeColor = 'bg-purple-100 text-purple-700 border-purple-200';
+        icon = <Zap size={10} className="mr-1 fill-purple-500" />;
+    }
+
+    return (
+        <span className={`flex items-center px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider border ${badgeColor} ml-2`}>
+            {icon}
+            {tier}
+        </span>
+    );
+  };
 
   return (
     <header className="bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-40 transition-all duration-200">
@@ -97,9 +120,9 @@ export const Navigation: React.FC<NavigationProps> = ({
             {currentUser ? (
             <div className="flex items-center gap-2">
                 <div className="text-right hidden sm:block mr-2">
-                    <div className="text-sm font-bold text-slate-900 flex items-center justify-end gap-1">
+                    <div className="text-sm font-bold text-slate-900 flex items-center justify-end">
                           {currentUser.name}
-                          {currentUser.role === UserRole.PHOTOGRAPHER && <Briefcase size={12} className="text-amber-500" />}
+                          {renderTierBadge(currentUser.tier)}
                     </div>
                 </div>
 

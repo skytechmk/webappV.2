@@ -9,7 +9,7 @@ const getAuthHeaders = () => {
 };
 
 export const api = {
-    // Users
+    // ... existing User/Auth methods ...
     fetchUsers: async (): Promise<User[]> => {
         const res = await fetch(`${API_URL}/api/users`, {
             headers: { ...getAuthHeaders() }
@@ -17,7 +17,6 @@ export const api = {
         return res.json();
     },
     
-    // Login & Auth
     login: async (email: string, password?: string): Promise<{ token: string, user: User }> => {
         const res = await fetch(`${API_URL}/api/auth/login`, {
             method: 'POST',
@@ -38,7 +37,6 @@ export const api = {
         return res.json();
     },
 
-    // Admin System Reset
     resetSystem: async (): Promise<void> => {
         const res = await fetch(`${API_URL}/api/admin/reset`, {
             method: 'POST',
@@ -82,7 +80,7 @@ export const api = {
         });
     },
 
-    // Events
+    // ... existing Event methods ...
     fetchEvents: async (): Promise<Event[]> => {
         const res = await fetch(`${API_URL}/api/events`, {
             headers: { ...getAuthHeaders() }
@@ -164,7 +162,7 @@ export const api = {
         return res.json();
     },
 
-    // Media
+    // Media - Updated to handle Privacy field and uploaderId
     uploadMedia: async (file: File, metadata: Partial<MediaItem>, eventId: string): Promise<MediaItem> => {
         const formData = new FormData();
         formData.append('file', file);
@@ -174,8 +172,12 @@ export const api = {
         formData.append('caption', metadata.caption || '');
         formData.append('uploadedAt', metadata.uploadedAt!);
         formData.append('uploaderName', metadata.uploaderName!);
+        // NEW: uploaderId
+        formData.append('uploaderId', metadata.uploaderId || '');
         formData.append('isWatermarked', String(metadata.isWatermarked));
         formData.append('watermarkText', metadata.watermarkText || '');
+        // NEW: Privacy
+        formData.append('privacy', metadata.privacy || 'public');
 
         const res = await fetch(`${API_URL}/api/media`, {
             method: 'POST',

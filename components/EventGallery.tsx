@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { ShieldCheck, Download, Calendar, LayoutGrid, Camera, Video, Star, Share2, Upload, CheckCircle, Link as LinkIcon, Play, Heart, X, Pause, BookOpen, Send, Lock, Search, ScanFace, Loader2, Trash2, CheckSquare, Square, ChevronLeft, ChevronRight, MessageSquare } from 'lucide-react';
+import { ShieldCheck, Download, Calendar, LayoutGrid, Camera, Video, Star, Share2, Upload, CheckCircle, Link as LinkIcon, Play, Heart, X, Pause, BookOpen, Send, Lock, Search, ScanFace, Loader2, Trash2, CheckSquare, Square, ChevronLeft, ChevronRight, MessageSquare, Globe } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Event, User, UserRole, MediaItem, TranslateFn, TierLevel, GuestbookEntry, Comment } from '../types';
 import { api } from '../services/api';
@@ -146,6 +146,9 @@ export const EventGallery: React.FC<EventGalleryProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [isScanning, setIsScanning] = useState(false);
   const [modelsLoaded, setModelsLoaded] = useState(false);
+  
+  // My Uploads Filter State
+  const [showMyUploads, setShowMyUploads] = useState(false);
 
   // Device detection
   const [isMobile, setIsMobile] = useState(false);
@@ -232,6 +235,17 @@ export const EventGallery: React.FC<EventGalleryProps> = ({
 
   const getDisplayMedia = () => {
       let media = filteredMedia || localMedia;
+      
+      // Filter for Privacy
+      if (!isOwner && currentUser?.role !== UserRole.ADMIN) {
+          media = media.filter(item => item.privacy !== 'private');
+      }
+
+      // Filter for My Uploads
+      if (showMyUploads && currentUser) {
+          media = media.filter(item => item.uploaderId === currentUser.id);
+      }
+
       if (searchQuery.trim()) {
           const q = searchQuery.toLowerCase();
           media = media.filter(item => 
@@ -572,6 +586,11 @@ export const EventGallery: React.FC<EventGalleryProps> = ({
 
           <div className="flex flex-wrap items-center gap-2">
                 {filteredMedia && <button onClick={() => { setFilteredMedia(null); setFindMeImage(null); }} className="flex items-center gap-1 px-3 py-2 text-sm font-bold text-red-600 bg-red-50 rounded-xl hover:bg-red-100"><X size={16} /> {t('clearFilter')}</button>}
+                {currentUser && !isBulkDeleteMode && (
+                    <button onClick={() => setShowMyUploads(!showMyUploads)} className={`p-2 rounded-xl transition-colors ${showMyUploads ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`} title={showMyUploads ? 'Show All Photos' : 'Show My Uploads'}>
+                        <Upload size={20} />
+                    </button>
+                )}
                 {(isOwner || currentUser?.role === UserRole.ADMIN) && displayMedia.length > 0 && (
                     <button onClick={toggleBulkDeleteMode} className={`p-2 rounded-xl transition-colors ${isBulkDeleteMode ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`} title={isBulkDeleteMode ? t('cancel') : t('selectMedia')}>
                         {isBulkDeleteMode ? <X size={20} /> : <CheckSquare size={20} />}
@@ -662,6 +681,14 @@ export const EventGallery: React.FC<EventGalleryProps> = ({
                   <p className="text-white/60 text-[10px] font-bold uppercase tracking-widest drop-shadow-md px-1.5 py-0.5 rounded bg-black/30 backdrop-blur-sm">{item.watermarkText}</p>
                 </div>
               )}
+              
+              {/* UPDATED: Privacy Lock Icon */}
+              {item.privacy === 'private' && (
+                  <div className="absolute top-2 right-2 bg-black/60 text-white p-1 rounded-full shadow-sm backdrop-blur-sm z-10">
+                      <Lock size={12} />
+                  </div>
+              )}
+
               <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-4 pointer-events-none">
                 <p className="text-white text-sm font-medium truncate">{item.caption}</p>
                 <div className="flex justify-between items-end mt-0.5">
@@ -801,6 +828,11 @@ export const EventGallery: React.FC<EventGalleryProps> = ({
                   {/* Caption Overlay (Static on top) */}
                   <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/70 to-transparent p-6 flex flex-col gap-4 max-h-[40vh] overflow-y-auto pointer-events-auto" onClick={e => e.stopPropagation()}>
                       <div className="text-center mb-2">
+                          {displayMedia[lightboxIndex].privacy === 'private' && (
+                              <div className="flex items-center justify-center gap-1 text-amber-400 mb-1 text-xs font-bold uppercase tracking-wider">
+                                  <Lock size={12} /> Private
+                              </div>
+                          )}
                           <p className="text-white text-lg font-bold drop-shadow-md">{displayMedia[lightboxIndex].caption}</p>
                           <p className="text-white/60 text-sm mt-1">{new Date(displayMedia[lightboxIndex].uploadedAt).toLocaleDateString()} • {displayMedia[lightboxIndex].uploaderName}</p>
                       </div>

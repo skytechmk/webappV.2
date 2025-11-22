@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
-import { X, RotateCcw, Type, Send, Loader2 } from 'lucide-react';
+import { X, RotateCcw, Type, Send, Loader2, Lock, Globe, AlertCircle } from 'lucide-react';
 import { TranslateFn } from '../types';
 
 interface MediaReviewModalProps {
   type: 'image' | 'video';
   src: string;
-  onConfirm: (caption: string) => void;
+  onConfirm: (caption: string, privacy: 'public' | 'private') => void;
   onRetake: () => void;
   onCancel: () => void;
   isUploading: boolean;
+  isRegistered: boolean; // New Prop to check auth status
   t: TranslateFn;
 }
 
@@ -19,9 +20,19 @@ export const MediaReviewModal: React.FC<MediaReviewModalProps> = ({
   onRetake,
   onCancel,
   isUploading,
+  isRegistered,
   t
 }) => {
   const [caption, setCaption] = useState('');
+  const [privacy, setPrivacy] = useState<'public' | 'private'>('public');
+
+  const handlePrivacyChange = (newPrivacy: 'public' | 'private') => {
+      if (newPrivacy === 'private' && !isRegistered) {
+          alert("Please login or register to upload private photos.");
+          return;
+      }
+      setPrivacy(newPrivacy);
+  };
 
   return (
     <div className="fixed inset-0 z-[60] bg-black flex flex-col animate-in fade-in duration-200 h-[100dvh]">
@@ -38,7 +49,7 @@ export const MediaReviewModal: React.FC<MediaReviewModalProps> = ({
         <div className="w-10" /> 
       </div>
 
-      {/* Content - Uses min-h-0 to prevent flex overflow */}
+      {/* Content */}
       <div className="flex-1 min-h-0 flex items-center justify-center bg-black relative overflow-hidden">
         {type === 'video' ? (
           <video 
@@ -46,7 +57,7 @@ export const MediaReviewModal: React.FC<MediaReviewModalProps> = ({
             autoPlay 
             controls 
             loop 
-            playsInline // Critical for iOS
+            playsInline
             className="max-w-full max-h-full object-contain" 
           />
         ) : (
@@ -58,8 +69,39 @@ export const MediaReviewModal: React.FC<MediaReviewModalProps> = ({
         )}
       </div>
 
-      {/* Controls - Safe bottom padding for iPhone X+ */}
+      {/* Controls */}
       <div className="bg-black/80 backdrop-blur-xl p-6 pb-8 z-20 border-t border-white/10">
+        {/* Privacy Toggle */}
+        <div className="flex flex-col items-center mb-4">
+             <div className="bg-white/10 rounded-full p-1 flex relative">
+                 <button
+                    onClick={() => handlePrivacyChange('public')}
+                    className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
+                        privacy === 'public' ? 'bg-white text-black' : 'text-white/60 hover:text-white'
+                    }`}
+                 >
+                     <Globe size={12} />
+                     {t('public')}
+                 </button>
+                 <button
+                    onClick={() => handlePrivacyChange('private')}
+                    className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
+                        privacy === 'private' 
+                            ? 'bg-white text-black' 
+                            : isRegistered ? 'text-white/60 hover:text-white' : 'text-white/20 cursor-not-allowed'
+                    }`}
+                 >
+                     <Lock size={12} />
+                     {t('private')}
+                 </button>
+             </div>
+             {!isRegistered && (
+                 <p className="text-[10px] text-white/40 mt-2 flex items-center gap-1">
+                     <AlertCircle size={10} /> {t('loginRequired')}
+                 </p>
+             )}
+        </div>
+
         <div className="relative mb-4">
             <div className="absolute left-3 top-1/2 -translate-y-1/2 text-white/50">
                 <Type size={16} />
@@ -83,7 +125,7 @@ export const MediaReviewModal: React.FC<MediaReviewModalProps> = ({
             {t('retry') || "Retake"}
           </button>
           <button 
-            onClick={() => onConfirm(caption)}
+            onClick={() => onConfirm(caption, privacy)}
             disabled={isUploading}
             className="flex-[2] py-3.5 bg-indigo-600 text-white font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-indigo-700 transition-colors disabled:opacity-70 shadow-lg shadow-indigo-900/30"
           >
