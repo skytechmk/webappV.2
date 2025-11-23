@@ -729,16 +729,25 @@ export default function App() {
       clearDeviceFingerprint();
       
       // 3. Clean URL
-      const url = new URL(window.location.href);
-      if (url.searchParams.has('event')) {
-          url.searchParams.delete('event');
-          window.history.replaceState({}, '', url.toString());
+      // FIX: Force clear URL and push to history to ensure reload doesn't restore state
+      if (typeof window !== 'undefined') {
+          const url = new URL(window.location.href);
+          url.search = ""; 
+          window.history.pushState({}, '', url.toString()); // Use pushState instead of replaceState to ensure clear history entry
+          window.location.href = '/'; // Force hard reload to clear memory
       }
   };
 
   const handleBack = () => {
       if (view === 'event') {
           setCurrentEventId(null);
+          // FIX: Clear the ?event=... param when going back to dashboard/landing
+          const url = new URL(window.location.href);
+          if (url.searchParams.has('event')) {
+             url.searchParams.delete('event');
+             window.history.replaceState({}, '', url.toString());
+          }
+
           setView(currentUser ? (currentUser.role === UserRole.ADMIN ? 'admin' : 'dashboard') : 'landing');
       } else if (view === 'dashboard' || view === 'admin') {
           handleLogout();
