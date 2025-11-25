@@ -2,7 +2,7 @@
 
 import React, { useState, useRef } from 'react';
 import { X, Upload, Briefcase, Image as ImageIcon, Trash2, Save, Eye, LayoutGrid } from 'lucide-react';
-import { User, TranslateFn, WatermarkPosition } from '../types';
+import { User, TranslateFn, WatermarkPosition, TIER_CONFIG } from '../types';
 
 interface StudioSettingsModalProps {
   currentUser: User;
@@ -12,6 +12,11 @@ interface StudioSettingsModalProps {
 }
 
 export const StudioSettingsModal: React.FC<StudioSettingsModalProps> = ({ currentUser, onClose, onSave, t }) => {
+  // Check if user has branding permission
+  if (!TIER_CONFIG[currentUser.tier].allowBranding) {
+    onClose();
+    return null;
+  }
   const [studioName, setStudioName] = useState(currentUser.studioName || '');
   const [logoUrl, setLogoUrl] = useState(currentUser.logoUrl || '');
   const [opacity, setOpacity] = useState(currentUser.watermarkOpacity || 0.85);

@@ -1,7 +1,6 @@
 import { User, Event, MediaItem, GuestbookEntry, Comment, Vendor } from '../types';
 
-// @ts-ignore
-const API_URL = import.meta.env.VITE_API_URL || ''; 
+const API_URL = import.meta.env.DEV ? (import.meta.env.VITE_API_URL || 'http://localhost:3001') : '';
 
 const getAuthHeaders = () => {
     const token = localStorage.getItem('snapify_token');
@@ -50,6 +49,13 @@ export const api = {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
             body: JSON.stringify(user)
+        });
+    },
+    upgradeUser: async (userId: string, tier: string): Promise<void> => {
+        await fetch(`${API_URL}/api/users/${userId}/upgrade`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+            body: JSON.stringify({ tier })
         });
     },
     deleteUser: async (id: string): Promise<void> => {
@@ -212,5 +218,15 @@ export const api = {
             body: JSON.stringify({ confirmation: 'RESET_CONFIRM' })
         });
         if (!res.ok) throw new Error("Failed to reset system");
+    },
+
+    getSystemStorage: async (): Promise<{
+        system: { filesystem: string; size: string; used: string; available: string; usePercent: string };
+        minio: { filesystem: string; size: string; used: string; available: string; usePercent: string };
+        timestamp: string;
+    }> => {
+        const res = await fetch(`${API_URL}/api/system/storage`, { headers: { ...getAuthHeaders() } });
+        if (!res.ok) throw new Error("Failed to get storage info");
+        return res.json();
     }
 };

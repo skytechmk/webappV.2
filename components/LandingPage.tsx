@@ -8,7 +8,7 @@ import { TermsModal } from './TermsModal';
 interface LandingPageProps {
   onGoogleLogin: () => void;
   onEmailAuth: (data: any, isSignUp: boolean) => void;
-  onContactSales: () => void;
+  onContactSales: (tier?: TierLevel) => void;
   isLoggingIn: boolean;
   authError: string;
   language: Language;
@@ -364,15 +364,15 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           <h2 className="text-3xl font-bold mb-8 text-slate-200">{t('pricingTitle')}</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 text-left">
             {getPricingTiers(t).map(tier => (
-              <PricingCard 
-                key={tier.id} 
-                tier={tier} 
+              <PricingCard
+                key={tier.id}
+                tier={tier}
                 t={t}
                 onSelect={(id) => {
                   const el = document.getElementById('auth-card');
                   el?.scrollIntoView({ behavior: 'smooth' });
-                  if (id !== TierLevel.FREE) onContactSales();
-                }} 
+                  if (id !== TierLevel.FREE) onContactSales(id);
+                }}
               />
             ))}
           </div>

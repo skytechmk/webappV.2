@@ -1,5 +1,5 @@
 import { WatermarkPosition } from '../types';
-// @ts-ignore
+// @ts-ignore - EXIF library has no TypeScript definitions
 import EXIF from 'exif-js';
 
 // Helper to load image

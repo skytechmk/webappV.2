@@ -1,5 +1,5 @@
 import React from 'react';
-import { Plus, Sparkles, Zap, Clock, Calendar, Image as ImageIcon, User as UserIcon, Crown, Star } from 'lucide-react';
+import { Plus, Sparkles, Zap, Clock, Calendar, Image as ImageIcon, User as UserIcon, Crown, Star, BarChart3, TrendingUp, Users, Download, Settings, Camera, Video, Palette } from 'lucide-react';
 import { Event, User, TranslateFn, TierLevel, UserRole } from '../types';
 
 interface UserDashboardProps {
@@ -109,7 +109,16 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
       ) : (
         // Events Grid
         <div className="grid md:grid-cols-2 gap-6">
-          {events.map(evt => {
+          {events
+            .filter(evt => {
+              const expired = evt.expiresAt ? new Date() > new Date(evt.expiresAt) : false;
+              // Hide expired events for FREE, BASIC, and PRO users
+              if (expired && (currentUser.tier === TierLevel.FREE || currentUser.tier === TierLevel.BASIC || currentUser.tier === TierLevel.PRO)) {
+                return false;
+              }
+              return true;
+            })
+            .map(evt => {
             const expired = evt.expiresAt ? new Date() > new Date(evt.expiresAt) : false;
             const isOwned = evt.hostId === currentUser?.id;
             
@@ -162,6 +171,117 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
               </div>
             )
           })}
+        </div>
+      )}
+
+      {/* Tier-Specific Enhancements */}
+      {currentUser.tier === TierLevel.PRO && (
+        <div className="mt-8 bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+          <div className="flex items-center gap-3 mb-6">
+            <BarChart3 className="text-purple-600" size={24} />
+            <h3 className="text-xl font-bold text-slate-900">Analytics & Insights</h3>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-6">
+            <div className="bg-gradient-to-br from-purple-50 to-indigo-50 p-4 rounded-xl border border-purple-100">
+              <div className="flex items-center justify-between mb-2">
+                <TrendingUp className="text-purple-600" size={20} />
+                <span className="text-2xl font-bold text-purple-900">{events.length}</span>
+              </div>
+              <p className="text-sm text-purple-700 font-medium">Total Events</p>
+              <p className="text-xs text-purple-600 mt-1">Events created this month</p>
+            </div>
+
+            <div className="bg-gradient-to-br from-blue-50 to-cyan-50 p-4 rounded-xl border border-blue-100">
+              <div className="flex items-center justify-between mb-2">
+                <Users className="text-blue-600" size={20} />
+                <span className="text-2xl font-bold text-blue-900">
+                  {events.reduce((total, event) => total + event.media.length, 0)}
+                </span>
+              </div>
+              <p className="text-sm text-blue-700 font-medium">Total Photos</p>
+              <p className="text-xs text-blue-600 mt-1">Across all events</p>
+            </div>
+
+            <div className="bg-gradient-to-br from-green-50 to-emerald-50 p-4 rounded-xl border border-green-100">
+              <div className="flex items-center justify-between mb-2">
+                <Download className="text-green-600" size={20} />
+                <span className="text-2xl font-bold text-green-900">
+                  {events.reduce((total, event) => total + (event.downloads || 0), 0)}
+                </span>
+              </div>
+              <p className="text-sm text-green-700 font-medium">Downloads</p>
+              <p className="text-xs text-green-600 mt-1">ZIP downloads requested</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {currentUser.tier === TierLevel.BASIC && (
+        <div className="mt-8 space-y-6">
+          {/* Quick Actions */}
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+            <div className="flex items-center gap-3 mb-6">
+              <Zap className="text-blue-600" size={24} />
+              <h3 className="text-xl font-bold text-slate-900">Quick Actions</h3>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-4">
+              <button
+                onClick={onNewEvent}
+                className="flex items-center gap-3 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-100 hover:shadow-md transition-all"
+              >
+                <Plus className="text-blue-600" size={20} />
+                <div className="text-left">
+                  <p className="font-bold text-blue-900">Create Event</p>
+                  <p className="text-sm text-blue-700">Start a new photo session</p>
+                </div>
+              </button>
+
+              <button
+                onClick={() => {/* TODO: Implement bulk upload */}}
+                className="flex items-center gap-3 p-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl border border-green-100 hover:shadow-md transition-all"
+              >
+                <Camera className="text-green-600" size={20} />
+                <div className="text-left">
+                  <p className="font-bold text-green-900">Bulk Upload</p>
+                  <p className="text-sm text-green-700">Upload multiple photos</p>
+                </div>
+              </button>
+            </div>
+          </div>
+
+          {/* Premium Features Preview */}
+          <div className="bg-gradient-to-r from-amber-50 to-yellow-50 rounded-2xl border border-amber-200 p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <Crown className="text-amber-600" size={24} />
+              <h3 className="text-xl font-bold text-amber-900">Unlock Premium Features</h3>
+            </div>
+
+            <p className="text-amber-700 mb-6">Upgrade to PRO for advanced features and unlimited possibilities.</p>
+
+            <div className="grid md:grid-cols-3 gap-4 mb-6">
+              <div className="flex items-center gap-3 p-3 bg-white/50 rounded-lg">
+                <Video className="text-amber-600" size={18} />
+                <span className="text-sm font-medium text-amber-900">4K Video Support</span>
+              </div>
+              <div className="flex items-center gap-3 p-3 bg-white/50 rounded-lg">
+                <Palette className="text-amber-600" size={18} />
+                <span className="text-sm font-medium text-amber-900">Custom Branding</span>
+              </div>
+              <div className="flex items-center gap-3 p-3 bg-white/50 rounded-lg">
+                <BarChart3 className="text-amber-600" size={18} />
+                <span className="text-sm font-medium text-amber-900">Analytics Dashboard</span>
+              </div>
+            </div>
+
+            <button
+              onClick={onRequestUpgrade}
+              className="w-full bg-gradient-to-r from-amber-500 to-yellow-500 text-white py-3 rounded-xl font-bold hover:shadow-lg transition-all"
+            >
+              Upgrade to PRO - $29.99/month
+            </button>
+          </div>
         </div>
       )}
     </main>

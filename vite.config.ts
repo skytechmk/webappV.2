@@ -97,10 +97,12 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: false,
+    chunkSizeWarningLimit: 600,
     rollupOptions: {
         output: {
             manualChunks: {
-                vendor: ['react', 'react-dom', 'socket.io-client', 'lucide-react', 'recharts']
+                vendor: ['react', 'react-dom'],
+                libs: ['socket.io-client', 'lucide-react', 'recharts', 'qrcode.react']
             }
         }
     }

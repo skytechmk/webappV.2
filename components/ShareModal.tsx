@@ -35,7 +35,6 @@ export const ShareModal: React.FC<ShareModalProps> = ({ eventId, eventTitle, onC
         });
       } catch (err) {
         // User cancelled or failed, fallback logic can go here
-        console.log('Share cancelled');
       }
     } else {
       // Fallback for desktop if they somehow clicked it

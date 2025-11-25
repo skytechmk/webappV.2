@@ -93,6 +93,16 @@ export const MediaReviewModal: React.FC<MediaReviewModalProps> = ({
 
       {/* Controls */}
       <div className="bg-black/80 backdrop-blur-xl p-6 pb-8 z-20 border-t border-white/10">
+        {/* Video Duration Notice */}
+        {type === 'video' && (
+          <div className="flex items-center justify-center mb-4 p-2 bg-amber-500/20 border border-amber-500/30 rounded-lg">
+            <AlertCircle size={14} className="text-amber-400 mr-2 flex-shrink-0" />
+            <p className="text-amber-200 text-xs font-medium text-center">
+              {t('videoDurationLimit') || "Videos must be 10 seconds or less"}
+            </p>
+          </div>
+        )}
+
         {/* Privacy Toggle */}
         <div className="flex flex-col items-center mb-4">
              <div className="bg-white/10 rounded-full p-1 flex relative">

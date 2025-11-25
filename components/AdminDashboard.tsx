@@ -8,10 +8,9 @@ import {
   Tooltip, 
   ResponsiveContainer 
 } from 'recharts';
-import { User, UserRole, TierLevel, Event, TranslateFn, MediaItem } from '../types';
-import { Trash2, HardDrive, Zap, Calendar, Image as ImageIcon, X, Clock, Eye, Plus, Edit, Save, Camera, Briefcase, AlertTriangle, ZoomIn, Download, Lock, ArrowLeft, LogOut, Mail, Building, ShieldAlert, Users, LayoutGrid, Settings, Crown, Star, RefreshCw } from 'lucide-react';
+import { User, UserRole, TierLevel, Event, TranslateFn, MediaItem, TIER_CONFIG } from '../types';
+import { Trash2, HardDrive, Zap, Calendar, Image as ImageIcon, X, Clock, Eye, Plus, Edit, Save, Camera, Briefcase, AlertTriangle, ZoomIn, Download, Lock, ArrowLeft, LogOut, Mail, Building, ShieldAlert, Users, LayoutGrid, Settings, Crown, Star, RefreshCw, Bell, Check } from 'lucide-react';
 import { api } from '../services/api';
-// @ts-ignore
 import { useRegisterSW } from 'virtual:pwa-register/react';
 import { socketService } from '../services/socketService'; // Import socket service
 
@@ -30,7 +29,7 @@ interface AdminDashboardProps {
   t: TranslateFn;
 }
 
-type Tab = 'users' | 'events' | 'userEvents' | 'settings';
+type Tab = 'users' | 'events' | 'userEvents' | 'settings' | 'system';
 
 interface DeleteConfirmationState {
   isOpen: boolean;
@@ -70,6 +69,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Modal/Action State
   const [deleteConfirmation, setDeleteConfirmation] = useState<DeleteConfirmationState | null>(null);
   const [isResetting, setIsResetting] = useState(false);
+
+  // System Storage State
+  const [systemStorage, setSystemStorage] = useState<{
+      system: { filesystem: string; size: string; used: string; available: string; usePercent: string };
+      minio: { filesystem: string; size: string; used: string; available: string; usePercent: string };
+      timestamp: string;
+  } | null>(null);
+  const [storageLoading, setStorageLoading] = useState(false);
+
+  // Notifications State
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [selectedNotification, setSelectedNotification] = useState<any>(null);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   
   // Event Edit State
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
@@ -92,6 +105,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     limit: u.storageLimitMb
   }));
 
+  // Fetch system storage data when System tab is active
+  useEffect(() => {
+    if (activeTab === 'system' && !systemStorage) {
+      const fetchStorageData = async () => {
+        setStorageLoading(true);
+        try {
+          const data = await api.getSystemStorage();
+          setSystemStorage(data);
+        } catch (error) {
+          console.error('Failed to fetch storage data:', error);
+        } finally {
+          setStorageLoading(false);
+        }
+      };
+      fetchStorageData();
+    }
+  }, [activeTab, systemStorage]);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -103,6 +134,45 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [previewMedia, editingEvent, editingUser]);
+
+  // Socket listener for upgrade requests
+  useEffect(() => {
+    socketService.connect();
+
+    const handleUpgradeRequest = (notification: any) => {
+      setNotifications(prev => [notification, ...prev]);
+      // Show browser notification if supported
+      if ('Notification' in window && Notification.permission === 'granted') {
+        new Notification('New Upgrade Request', {
+          body: `${notification.userInfo?.name || 'Anonymous user'} requested upgrade to ${notification.tier}`,
+          icon: '/icon-192x192.png'
+        });
+      }
+    };
+
+    socketService.on('upgrade_request', handleUpgradeRequest);
+
+    return () => {
+      socketService.off('upgrade_request', handleUpgradeRequest);
+    };
+  }, []);
+
+  // Close notifications when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (showNotifications && !(event.target as Element).closest('.notification-container')) {
+        setShowNotifications(false);
+      }
+    };
+
+    if (showNotifications) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showNotifications]);
 
   // --- Helpers ---
   const getEventHostName = (hostId: string) => {
@@ -268,19 +338,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setEditingUser(user);
     setEditUserName(user.name);
     setEditUserEmail(user.email);
-    setEditUserStudio(user.studioName || '');
+    setEditUserStudio(TIER_CONFIG[user.tier].allowBranding ? (user.studioName || '') : '');
     setSelectedTier(user.tier);
     setSelectedRole(user.role);
   };
 
   const handleSaveUserEdit = () => {
     if (!editingUser) return;
-    
+
+    const config = TIER_CONFIG[selectedTier];
     const updatedUser: User = {
         ...editingUser,
         name: editUserName,
         email: editUserEmail,
-        studioName: editUserStudio,
+        studioName: config.allowBranding ? editUserStudio : undefined,
         role: selectedRole,
         tier: selectedTier
     };
@@ -439,7 +510,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           Manage global configurations and perform critical maintenance tasks.
                       </p>
                   </div>
-                  
+
                   <div className="space-y-6">
                       {/* Force Update Card */}
                       <div className="border border-indigo-200 rounded-2xl p-6 bg-indigo-50/50 flex items-center justify-between">
@@ -451,7 +522,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                   Force this browser to fetch the latest version of the application immediately.
                               </p>
                           </div>
-                          <button 
+                          <button
                               onClick={handleForceUpdate}
                               className="py-2.5 px-5 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-all shadow-md flex items-center gap-2"
                           >
@@ -470,7 +541,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                   Send a signal to <strong>ALL connected users</strong> to unregister their service worker and reload the page. Use this after deploying a new version to ensure everyone gets it immediately.
                               </p>
                           </div>
-                          <button 
+                          <button
                               onClick={handleGlobalClientReload}
                               className="py-2.5 px-5 bg-amber-600 text-white font-bold rounded-xl hover:bg-amber-700 transition-all shadow-md flex items-center gap-2"
                           >
@@ -489,11 +560,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                   <Trash2 size={20}/> Danger Zone
                               </h4>
                               <p className="text-sm text-red-700 mb-6 max-w-xl leading-relaxed">
-                                  Performs a hard reset of the entire SnapifY instance. This action will irreversibly delete 
-                                  <strong> ALL</strong> users, events, photos, videos, and comments from the database and clear 
-                                  all files from storage. 
+                                  Performs a hard reset of the entire SnapifY instance. This action will irreversibly delete
+                                  <strong> ALL</strong> users, events, photos, videos, and comments from the database and clear
+                                  all files from storage.
                               </p>
-                              <button 
+                              <button
                                   onClick={promptResetSystem}
                                   className="py-3 px-6 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 transition-all shadow-lg shadow-red-500/20 flex items-center gap-2"
                               >
@@ -502,6 +573,102 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               </button>
                           </div>
                       </div>
+                  </div>
+              </div>
+          </div>
+      );
+  }
+
+  const renderSystem = () => {
+      return (
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden p-8 animate-in fade-in duration-300">
+              <div className="max-w-4xl mx-auto">
+                  <div className="text-center mb-10">
+                      <div className="w-20 h-20 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-4 border border-green-100">
+                          <HardDrive className="text-green-600" size={40} />
+                      </div>
+                      <h2 className="text-3xl font-black text-slate-900 mb-2">System Storage</h2>
+                      <p className="text-slate-500">
+                          Real-time monitoring of system and storage capacity.
+                      </p>
+                  </div>
+
+                  <div className="space-y-6">
+                      {/* System Storage Card */}
+                      <div className="border border-slate-200 rounded-2xl p-6 bg-slate-50/50">
+                          <h4 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+                              <HardDrive size={18} /> System Disk Usage
+                          </h4>
+                          {storageLoading ? (
+                              <div className="flex items-center justify-center py-8">
+                                  <div className="animate-spin border-2 border-slate-300 border-t-slate-600 rounded-full w-8 h-8"></div>
+                                  <span className="ml-3 text-slate-600">Loading storage info...</span>
+                              </div>
+                          ) : systemStorage ? (
+                              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                  <div className="bg-white p-4 rounded-xl border border-slate-200">
+                                      <div className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-1">Filesystem</div>
+                                      <div className="text-lg font-black text-slate-900">{systemStorage.system.filesystem}</div>
+                                  </div>
+                                  <div className="bg-white p-4 rounded-xl border border-slate-200">
+                                      <div className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-1">Total Size</div>
+                                      <div className="text-lg font-black text-slate-900">{systemStorage.system.size}</div>
+                                  </div>
+                                  <div className="bg-white p-4 rounded-xl border border-slate-200">
+                                      <div className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-1">Used</div>
+                                      <div className="text-lg font-black text-slate-900">{systemStorage.system.used}</div>
+                                  </div>
+                                  <div className="bg-white p-4 rounded-xl border border-slate-200">
+                                      <div className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-1">Available</div>
+                                      <div className="text-lg font-black text-slate-900">{systemStorage.system.available}</div>
+                                  </div>
+                              </div>
+                          ) : (
+                              <div className="text-center py-8 text-slate-500">
+                                  <HardDrive size={48} className="mx-auto mb-4 text-slate-300" />
+                                  <p>Unable to load storage information</p>
+                              </div>
+                          )}
+                      </div>
+
+                      {/* MinIO Storage Card */}
+                      <div className="border border-slate-200 rounded-2xl p-6 bg-slate-50/50">
+                          <h4 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+                              <HardDrive size={18} /> MinIO Storage Usage
+                          </h4>
+                          {systemStorage ? (
+                              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                  <div className="bg-white p-4 rounded-xl border border-slate-200">
+                                      <div className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-1">Filesystem</div>
+                                      <div className="text-lg font-black text-slate-900">{systemStorage.minio.filesystem}</div>
+                                  </div>
+                                  <div className="bg-white p-4 rounded-xl border border-slate-200">
+                                      <div className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-1">Total Size</div>
+                                      <div className="text-lg font-black text-slate-900">{systemStorage.minio.size}</div>
+                                  </div>
+                                  <div className="bg-white p-4 rounded-xl border border-slate-200">
+                                      <div className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-1">Used</div>
+                                      <div className="text-lg font-black text-slate-900">{systemStorage.minio.used}</div>
+                                  </div>
+                                  <div className="bg-white p-4 rounded-xl border border-slate-200">
+                                      <div className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-1">Available</div>
+                                      <div className="text-lg font-black text-slate-900">{systemStorage.minio.available}</div>
+                                  </div>
+                              </div>
+                          ) : (
+                              <div className="text-center py-8 text-slate-500">
+                                  <HardDrive size={48} className="mx-auto mb-4 text-slate-300" />
+                                  <p>Unable to load MinIO information</p>
+                              </div>
+                          )}
+                      </div>
+
+                      {/* Last Updated */}
+                      {systemStorage && (
+                          <div className="text-center text-xs text-slate-400">
+                              Last updated: {new Date(systemStorage.timestamp).toLocaleString()}
+                          </div>
+                      )}
                   </div>
               </div>
           </div>
@@ -527,6 +694,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 {[
                     { id: 'users', icon: Users, label: 'Users' },
                     { id: 'events', icon: Calendar, label: 'Events' },
+                    { id: 'system', icon: HardDrive, label: 'System' },
                     { id: 'settings', icon: Settings, label: 'Settings' }
                 ].map(tab => (
                     <button
@@ -545,7 +713,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
 
             <div className="flex items-center gap-3">
-                <button 
+                <button
                     onClick={onNewEvent}
                     className="flex items-center gap-2 bg-slate-900 text-white px-4 py-2.5 rounded-xl font-bold hover:bg-slate-800 transition-colors shadow-lg shadow-slate-500/20 text-sm"
                 >
@@ -553,6 +721,73 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <span className="hidden sm:inline">{t('newEvent')}</span>
                 </button>
                 <div className="h-8 w-px bg-slate-200 mx-1"></div>
+                <div className="relative notification-container">
+                    <button
+                        onClick={() => setShowNotifications(!showNotifications)}
+                        className="p-2.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors relative"
+                        title="Notifications"
+                    >
+                        <Bell size={20} />
+                        {notifications.length > 0 && (
+                            <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-bold">
+                                {notifications.length > 9 ? '9+' : notifications.length}
+                            </span>
+                        )}
+                    </button>
+                    {showNotifications && (
+                        <div className="absolute right-0 top-full mt-2 w-80 bg-white rounded-xl shadow-xl border border-slate-200 z-50 max-h-96 overflow-y-auto notification-container">
+                            <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+                                <h4 className="font-bold text-slate-900">Notifications</h4>
+                                <button
+                                    onClick={() => setNotifications([])}
+                                    className="text-xs text-slate-500 hover:text-slate-700"
+                                >
+                                    Clear All
+                                </button>
+                            </div>
+                            {notifications.length === 0 ? (
+                                <div className="p-8 text-center text-slate-500">
+                                    <Bell size={32} className="mx-auto mb-2 opacity-50" />
+                                    <p className="text-sm">No notifications</p>
+                                </div>
+                            ) : (
+                                <div className="divide-y divide-slate-100">
+                                    {notifications.map((notification, index) => (
+                                        <div
+                                            key={notification.id || index}
+                                            onClick={() => {
+                                                setSelectedNotification(notification);
+                                                setShowUpgradeModal(true);
+                                                setShowNotifications(false);
+                                            }}
+                                            className="p-4 hover:bg-slate-50 cursor-pointer transition-colors"
+                                        >
+                                            <div className="flex items-start gap-3">
+                                                <div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center flex-shrink-0">
+                                                    <Crown size={16} className="text-indigo-600" />
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-sm font-medium text-slate-900">
+                                                        Upgrade Request
+                                                    </p>
+                                                    <p className="text-xs text-slate-600 mt-1">
+                                                        {notification.userInfo?.name || 'Anonymous user'} → {notification.tier}
+                                                    </p>
+                                                    <p className="text-xs text-slate-400 mt-1">
+                                                        {new Date(notification.timestamp).toLocaleString()}
+                                                    </p>
+                                                </div>
+                                                <div className="text-slate-400">
+                                                    <Crown size={14} />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
                 <button onClick={onClose} className="p-2.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors" title={t('backToApp')}>
                     <LayoutGrid size={20} />
                 </button>
@@ -594,9 +829,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           )}
 
           {/* Content Switcher */}
-          {activeTab === 'settings' ? renderSettings() : 
-           activeTab === 'userEvents' ? renderUserEvents() : 
-           activeTab === 'users' ? (
+           {activeTab === 'settings' ? renderSettings() :
+            activeTab === 'system' ? renderSystem() :
+            activeTab === 'userEvents' ? renderUserEvents() :
+            activeTab === 'users' ? (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* User List */}
                 <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
@@ -760,13 +996,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 <input type="text" value={editUserEmail} onChange={(e) => setEditUserEmail(e.target.value)} className="bg-transparent w-full focus:outline-none font-medium" />
                             </div>
                         </div>
-                        <div>
-                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Studio / Business</label>
-                            <div className="flex items-center px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-900">
-                                <Building size={18} className="mr-3 text-slate-400" />
-                                <input type="text" value={editUserStudio} onChange={(e) => setEditUserStudio(e.target.value)} className="bg-transparent w-full focus:outline-none font-medium" placeholder="No studio name" />
+                        {TIER_CONFIG[selectedTier].allowBranding && (
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Studio / Business</label>
+                                <div className="flex items-center px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-900">
+                                    <Building size={18} className="mr-3 text-slate-400" />
+                                    <input type="text" value={editUserStudio} onChange={(e) => setEditUserStudio(e.target.value)} className="bg-transparent w-full focus:outline-none font-medium" placeholder="No studio name" />
+                                </div>
                             </div>
-                        </div>
+                        )}
                     </div>
 
                     <div className="grid grid-cols-2 gap-4 pt-2">
@@ -905,6 +1143,101 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   {isResetting ? <span className="animate-spin border-2 border-white/30 border-t-white rounded-full w-5 h-5"></span> : <Trash2 size={18} />}
                   {deleteConfirmation.type === 'system' ? 'CONFIRM RESET' : 'Delete'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* User Upgrade Modal */}
+      {showUpgradeModal && selectedNotification && (
+        <div className="fixed inset-0 z-[80] bg-black/60 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden p-6 animate-in zoom-in-95">
+            <div className="text-center mb-6">
+              <div className="w-16 h-16 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Crown size={32} />
+              </div>
+              <h3 className="text-2xl font-bold text-slate-900">Upgrade User</h3>
+              <p className="text-slate-500 mt-2">
+                Confirm upgrade for this user
+              </p>
+            </div>
+
+            <div className="space-y-4 mb-6">
+              <div className="bg-slate-50 p-4 rounded-xl">
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Full Name</label>
+                    <p className="text-slate-900 font-medium">{selectedNotification.userInfo?.name || 'Anonymous User'}</p>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Email Address</label>
+                    <p className="text-slate-900 font-medium">{selectedNotification.userInfo?.email || 'Not provided'}</p>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Requested Tier</label>
+                    <p className="text-slate-900 font-medium">{selectedNotification.tier}</p>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Current Tier</label>
+                    <p className="text-slate-900 font-medium">{selectedNotification.userInfo?.currentTier || 'FREE'}</p>
+                  </div>
+                  {!selectedNotification.userInfo?.id && (
+                    <div className="bg-amber-50 border border-amber-200 p-3 rounded-lg">
+                      <p className="text-sm text-amber-800 font-medium">⚠️ Anonymous Request</p>
+                      <p className="text-xs text-amber-700 mt-1">This user is not registered. You cannot upgrade anonymous users.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowUpgradeModal(false);
+                  setSelectedNotification(null);
+                }}
+                className="flex-1 py-3 bg-slate-100 text-slate-700 font-bold rounded-xl hover:bg-slate-200 transition-colors"
+              >
+                {selectedNotification.userInfo?.id ? 'Cancel' : 'Close'}
+              </button>
+              {selectedNotification.userInfo?.id ? (
+                <button
+                  onClick={async () => {
+                    try {
+                      await api.upgradeUser(selectedNotification.userInfo.id, selectedNotification.tier);
+                      // Update the user in the local state
+                      const updatedUser = users.find(u => u.id === selectedNotification.userInfo.id);
+                      if (updatedUser) {
+                        onUpdateUser({ ...updatedUser, tier: selectedNotification.tier as TierLevel });
+                      }
+                      // Remove the notification
+                      setNotifications(prev => prev.filter(n => n.id !== selectedNotification.id));
+                      setShowUpgradeModal(false);
+                      setSelectedNotification(null);
+                      alert('User upgraded successfully!');
+                    } catch (error) {
+                      console.error('Failed to upgrade user:', error);
+                      alert('Failed to upgrade user. Please try again.');
+                    }
+                  }}
+                  className="flex-1 py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2"
+                >
+                  <Crown size={16} />
+                  Confirm Upgrade
+                </button>
+              ) : (
+                <button
+                  onClick={() => {
+                    setShowUpgradeModal(false);
+                    setSelectedNotification(null);
+                  }}
+                  className="flex-1 py-3 bg-slate-500 text-white font-bold rounded-xl cursor-not-allowed flex items-center justify-center gap-2"
+                  disabled
+                >
+                  Cannot Upgrade Anonymous User
+                </button>
+              )}
             </div>
           </div>
         </div>

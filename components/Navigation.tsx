@@ -1,6 +1,6 @@
 import React from 'react';
 import { Globe, LogOut, User, Home, Settings, ShieldCheck, ArrowLeft, Menu, X } from 'lucide-react';
-import { User as UserType, UserRole, TranslateFn, Language } from '../types';
+import { User as UserType, UserRole, TranslateFn, Language, TIER_CONFIG } from '../types';
 
 interface NavigationProps {
   currentUser: UserType | null;
@@ -114,7 +114,7 @@ export const Navigation: React.FC<NavigationProps> = ({
                      </div>
                      <span className="text-sm font-bold text-slate-700">{currentUser.name}</span>
                  </div>
-                 <button onClick={onOpenSettings} className="p-2 text-slate-400 hover:text-slate-600 transition-colors"><Settings size={18} /></button>
+                 {TIER_CONFIG[currentUser.tier].allowBranding && <button onClick={onOpenSettings} className="p-2 text-slate-400 hover:text-slate-600 transition-colors"><Settings size={18} /></button>}
                  <button onClick={onLogout} className="p-2 text-red-400 hover:text-red-600 transition-colors"><LogOut size={18} /></button>
              </div>
          ) : (
@@ -160,9 +160,11 @@ export const Navigation: React.FC<NavigationProps> = ({
                           </button>
                       )}
 
-                      <button onClick={() => { onOpenSettings(); setMenuOpen(false); }} className="w-full py-3 px-4 bg-slate-100 rounded-xl font-bold text-slate-700 flex items-center gap-3">
-                          <Settings size={18} /> {t('studioSettings')}
-                      </button>
+                      {currentUser && TIER_CONFIG[currentUser.tier].allowBranding && (
+                          <button onClick={() => { onOpenSettings(); setMenuOpen(false); }} className="w-full py-3 px-4 bg-slate-100 rounded-xl font-bold text-slate-700 flex items-center gap-3">
+                              <Settings size={18} /> {t('studioSettings')}
+                          </button>
+                      )}
 
                       <button onClick={onLogout} className="w-full py-3 px-4 bg-red-50 text-red-600 rounded-xl font-bold flex items-center gap-3">
                           <LogOut size={18} /> {t('logOut')}

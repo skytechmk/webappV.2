@@ -141,7 +141,7 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({ currentUser,
           {/* NEW: City Input with Autocomplete */}
           <div className="relative" ref={suggestionsRef}>
             <label className="block text-sm font-bold text-slate-700 mb-2 flex items-center gap-2">
-                <MapPin size={16} className="text-slate-400" /> Location / City
+                <MapPin size={16} className="text-slate-400" /> {t('locationCity')}
             </label>
             <div className="relative">
                 <input 
@@ -177,7 +177,7 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({ currentUser,
                     ))}
                 </div>
             )}
-            <p className="text-[10px] text-slate-400 mt-1 ml-1">We use this to find local photographers for you.</p>
+            <p className="text-[10px] text-slate-400 mt-1 ml-1">{t('locationHelpText')}</p>
           </div>
           
           <div>
@@ -188,14 +188,14 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({ currentUser,
                   key={tItem.id}
                   type="button"
                   onClick={() => setTheme(tItem.id)}
-                  className={`flex flex-col items-center justify-center p-2 rounded-xl border-2 transition-all duration-200 ${
-                    theme === tItem.id 
-                      ? 'border-indigo-500 bg-indigo-50 text-indigo-700 shadow-sm' 
+                  className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all duration-200 min-h-[70px] ${
+                    theme === tItem.id
+                      ? 'border-indigo-500 bg-indigo-50 text-indigo-700 shadow-sm'
                       : 'border-slate-200 text-slate-500 hover:border-slate-300 hover:bg-slate-50'
                   }`}
                 >
-                  <span className="text-xl mb-1">{tItem.emoji}</span>
-                  <span className="text-[10px] font-bold uppercase tracking-wide">{tItem.label}</span>
+                  <span className="text-2xl mb-2">{tItem.emoji}</span>
+                  <span className="text-[9px] font-bold uppercase tracking-wide text-center leading-tight break-words px-1">{t(tItem.labelKey)}</span>
                 </button>
               ))}
             </div>

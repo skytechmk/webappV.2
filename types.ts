@@ -104,17 +104,18 @@ export interface MediaItem {
   eventId: string;
   type: 'image' | 'video';
   url: string;
-  previewUrl?: string; 
-  isProcessing?: boolean; 
-  caption?: string; 
+  previewUrl?: string;
+  isProcessing?: boolean;
+  caption?: string;
   uploadedAt: string;
   uploaderName: string;
-  uploaderId?: string; 
+  uploaderId?: string;
   isWatermarked?: boolean;
   watermarkText?: string;
-  likes?: number; 
-  comments?: Comment[]; 
-  privacy: 'public' | 'private'; 
+  likes?: number;
+  comments?: Comment[];
+  privacy: 'public' | 'private';
+  orientation?: number; // EXIF orientation (1-8)
 }
 
 export interface GuestbookEntry {

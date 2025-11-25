@@ -8,6 +8,22 @@ import { isMobileDevice } from '../utils/deviceDetection';
 import { ShareModal } from './ShareModal';
 import { VendorAdCard } from './VendorAdCard';
 
+// Helper function to get CSS transform for EXIF orientation
+const getOrientationTransform = (orientation: number | undefined): string => {
+    if (!orientation || orientation === 1) return '';
+
+    switch (orientation) {
+        case 2: return 'scaleX(-1)'; // Mirror horizontal
+        case 3: return 'rotate(180deg)'; // Rotate 180
+        case 4: return 'scaleY(-1)'; // Mirror vertical
+        case 5: return 'scaleX(-1) rotate(90deg)'; // Mirror horizontal and rotate 90 CW
+        case 6: return 'rotate(90deg)'; // Rotate 90 CW
+        case 7: return 'scaleX(-1) rotate(-90deg)'; // Mirror horizontal and rotate 90 CCW
+        case 8: return 'rotate(-90deg)'; // Rotate 90 CCW
+        default: return '';
+    }
+};
+
 declare global {
     interface Window {
         faceapi: any;
@@ -585,11 +601,12 @@ export const EventGallery: React.FC<EventGalleryProps> = ({
             ) : (
               // Updated Image Grid Item with Fallback
               <div className="w-full h-auto bg-slate-200 relative min-h-[100px]">
-                  <img 
-                      src={item.previewUrl || item.url} 
-                      alt={item.caption} 
-                      className="w-full h-full object-cover" 
-                      loading="lazy" 
+                  <img
+                      src={item.previewUrl || item.url}
+                      alt={item.caption}
+                      className="w-full h-full object-cover"
+                      style={{ transform: getOrientationTransform(item.orientation) }}
+                      loading="lazy"
                       onError={(e) => {
                           e.currentTarget.style.display = 'none';
                           e.currentTarget.parentElement?.querySelector('.error-placeholder')?.classList.remove('hidden');
@@ -711,9 +728,9 @@ export const EventGallery: React.FC<EventGalleryProps> = ({
             </p>
             {/* NEW: City Display */}
             {event.city && (
-               <p className="text-slate-500 flex items-center justify-center md:justify-start mb-6 font-medium">
-                  <MapPin size={18} className="mr-2 text-red-500" /> {event.city}
-               </p>
+                <p className="text-slate-500 flex items-center justify-center md:justify-start mb-6 font-medium">
+                   <MapPin size={18} className="mr-2 text-red-500" /> {t('city')}: {event.city}
+                </p>
             )}
             <div className="text-slate-700 bg-slate-50 p-5 rounded-2xl border border-slate-200 w-full text-left shadow-sm relative">
               <p className="italic">{event.description}</p>
@@ -972,10 +989,11 @@ export const EventGallery: React.FC<EventGalleryProps> = ({
                                         muted
                                       />
                                   ) : (
-                                      <img 
-                                        src={item.previewUrl || item.url} 
-                                        alt={item.caption} 
+                                      <img
+                                        src={item.previewUrl || item.url}
+                                        alt={item.caption}
                                         className="max-w-full max-h-full object-contain rounded-lg shadow-2xl select-none"
+                                        style={{ transform: getOrientationTransform(item.orientation) }}
                                         draggable={false}
                                       />
                                   )}
