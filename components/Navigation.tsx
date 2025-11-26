@@ -18,7 +18,11 @@ interface NavigationProps {
   t: TranslateFn;
 }
 
-export const Navigation: React.FC<NavigationProps> = ({
+interface NavigationPropsExtended extends NavigationProps {
+  adminStatus?: {adminId: string, online: boolean, lastSeen: number}[];
+}
+
+export const Navigation: React.FC<NavigationPropsExtended> = ({
   currentUser,
   guestName,
   view,
@@ -31,6 +35,7 @@ export const Navigation: React.FC<NavigationProps> = ({
   onBack,
   onToAdmin,
   onOpenSettings,
+  adminStatus = [],
   t
 }) => {
   const [menuOpen, setMenuOpen] = React.useState(false);

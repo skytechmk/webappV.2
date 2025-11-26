@@ -127,7 +127,7 @@ export const LiveSlideshow: React.FC<LiveSlideshowProps> = ({
   };
 
   const handleShare = () => {
-    const link = `${window.location.origin}/event/${event.id}/live`;
+    const link = `${window.location.origin}?event=${event.id}`;
     navigator.clipboard.writeText(link).then(() => {
       alert(t('linkCopied'));
     });
@@ -346,10 +346,10 @@ export const LiveSlideshow: React.FC<LiveSlideshowProps> = ({
           <div className="bg-white p-8 rounded-3xl text-center max-w-sm mx-4">
             <h3 className="text-xl font-bold text-slate-900 mb-4">{t('shareLiveWall')}</h3>
             <div className="bg-white p-4 rounded-2xl shadow-lg border border-slate-100 inline-block mb-4">
-              <QRCodeSVG 
-                value={`${window.location.origin}/event/${event.id}/live`} 
-                size={200} 
-                fgColor={qrFgColor} 
+              <QRCodeSVG
+                value={`${window.location.origin}?event=${event.id}`}
+                size={200}
+                fgColor={qrFgColor}
               />
             </div>
             <p className="text-slate-600 text-sm mb-4">

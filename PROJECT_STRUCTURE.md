@@ -38,11 +38,14 @@ SnapifY is a comprehensive event sharing platform that allows users to create sh
 
 ```
 /var/www/snapify/
+├── 📄 .env                           # Environment variables
+├── 📄 .gitignore                     # Git ignore rules
 ├── 📄 AI_DEVELOPER_GUIDE.md          # AI development guidelines
 ├── 📄 DEPLOYMENT.md                  # Deployment instructions
 ├── 📄 README.md                      # Project overview
 ├── 📄 PROJECT_STRUCTURE.md           # This file
 ├── 📄 package.json                   # Frontend dependencies
+├── 📄 package-lock.json              # Dependency lock file
 ├── 📄 tsconfig.json                  # TypeScript configuration
 ├── 📄 vite.config.ts                 # Vite build configuration
 ├── 📄 index.html                     # Main HTML template
@@ -56,7 +59,11 @@ SnapifY is a comprehensive event sharing platform that allows users to create sh
 ├── 📄 restart.sh                     # Deployment restart script
 ├── 📄 stop.sh                        # Stop application script
 ├── 📄 deploy.sh                      # Deployment script
-├── 📁 components/                    # React components
+├── 📄 instant-deploy.sh              # Instant deployment script
+├── 📁 dist/                          # Build output directory
+├── 📁 logs/                          # Application logs
+├── 📁 node_modules/                  # Node.js dependencies
+├── � components/                    # React components
 │   ├── 📄 AdminDashboard.tsx         # Admin management interface
 │   ├── 📄 CameraCapture.tsx          # Camera functionality
 │   ├── 📄 ContactModal.tsx           # Upgrade/contact modal
@@ -82,6 +89,7 @@ SnapifY is a comprehensive event sharing platform that allows users to create sh
 ├── 📁 services/                      # API and external services
 │   ├── 📄 api.ts                     # REST API client
 │   ├── 📄 geminiService.ts           # Google Gemini AI service
+│   ├── 📄 geolocationService.ts      # Geolocation service
 │   ├── 📄 ollamaService.ts           # Local AI service (backup)
 │   └── 📄 socketService.ts           # Socket.io client service
 ├── 📁 utils/                         # Utility functions
@@ -436,6 +444,6 @@ For development questions, feature requests, or bug reports, please refer to the
 
 ---
 
-**Last Updated**: November 25, 2025
-**Version**: 2.1
+**Last Updated**: November 26, 2025 at 16:19 UTC
+**Version**: 2.2
 **Status**: Production Ready

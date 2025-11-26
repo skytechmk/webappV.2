@@ -399,6 +399,23 @@ app.post('/api/auth/login', async (req, res) => {
             const isValid = await bcrypt.compare(password, user.password);
             if (!isValid) return res.status(401).json({ error: "Invalid credentials" });
         } catch (bcryptErr) { return res.status(500).json({ error: "Authentication error" }); }
+
+        // Track admin status on login (not just WebSocket)
+        if (user.role === 'ADMIN') {
+            adminOnlineStatus.set(user.id, {
+                online: true,
+                lastSeen: Date.now(),
+                loginTime: Date.now() // Track login time
+            });
+            // Notify all users about admin login
+            io.emit('admin_status_update', {
+                adminId: user.id,
+                online: true,
+                lastSeen: Date.now()
+            });
+            console.log(`Admin ${user.name} (${user.id}) logged in`);
+        }
+
         const { password: _, ...safeUser } = user;
         const token = jwt.sign({ id: user.id, role: user.role, email: user.email }, JWT_SECRET, { expiresIn: JWT_EXPIRY });
         res.json({ token, user: safeUser });
@@ -432,6 +449,27 @@ app.post('/api/auth/google', async (req, res) => {
             }
         });
     } catch (error) { return res.status(401).json({ error: "Google authentication failed" }); }
+});
+
+// --- LOGOUT ---
+app.post('/api/auth/logout', authenticateToken, (req, res) => {
+    // Mark admin as offline when they explicitly log out
+    if (req.user.role === 'ADMIN') {
+        const adminData = adminOnlineStatus.get(req.user.id);
+        if (adminData) {
+            adminData.online = false;
+            adminData.lastSeen = Date.now();
+            // Notify all users about admin logout
+            io.emit('admin_status_update', {
+                adminId: req.user.id,
+                online: false,
+                lastSeen: Date.now()
+            });
+            console.log(`Admin ${req.user.name} (${req.user.id}) logged out`);
+        }
+    }
+
+    res.json({ success: true, message: "Logged out successfully" });
 });
 
 // --- ADMIN RESET ---
@@ -490,7 +528,7 @@ app.get('/api/events', authenticateToken, (req, res) => {
 });
 
 app.get('/api/events/:id', async (req, res) => {
-    db.get(`SELECT events.*, users.tier as hostTier FROM events JOIN users ON events.hostId = users.id WHERE events.id = ?`, [req.params.id], async (err, evt) => {
+    db.get(`SELECT events.*, users.tier as hostTier FROM events LEFT JOIN users ON events.hostId = users.id WHERE events.id = ?`, [req.params.id], async (err, evt) => {
         if (err || !evt) return res.status(404).json({ error: "Not found" });
         // Check if event has expired
         if (evt.expiresAt && new Date(evt.expiresAt) < new Date()) {
@@ -1039,12 +1077,33 @@ Please review and process this upgrade request.
 
 // --- ADMIN STATUS ---
 app.get('/api/admin/status', (req, res) => {
-    const adminStatus = Array.from(adminOnlineStatus.entries()).map(([adminId, status]) => ({
-        adminId,
-        online: status.online,
-        lastSeen: status.lastSeen
-    }));
-    res.json({ admins: adminStatus });
+    // Get all admin users from database
+    db.all("SELECT id, name FROM users WHERE role = 'ADMIN'", [], (err, adminUsers) => {
+        if (err) return res.status(500).json({ error: err.message });
+
+        const now = Date.now();
+        const oneHourAgo = now - (60 * 60 * 1000); // 1 hour ago
+
+        const adminStatus = adminUsers.map(admin => {
+            const wsStatus = adminOnlineStatus.get(admin.id);
+
+            // Consider admin online if:
+            // 1. WebSocket connection is active, OR
+            // 2. Logged in within the last hour
+            const isOnline = Boolean((wsStatus && wsStatus.online) ||
+                           (wsStatus && wsStatus.loginTime && wsStatus.loginTime > oneHourAgo));
+
+
+            return {
+                adminId: admin.id,
+                online: isOnline,
+                lastSeen: wsStatus ? wsStatus.lastSeen : (wsStatus && wsStatus.loginTime ? wsStatus.loginTime : now),
+                name: admin.name
+            };
+        });
+
+        res.json({ admins: adminStatus });
+    });
 });
 
 // --- SUPPORT CHAT ---

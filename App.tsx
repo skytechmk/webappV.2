@@ -669,7 +669,22 @@ export default function App() {
       }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+      // Call logout API if user is logged in
+      if (currentUser) {
+          try {
+              await fetch(`${API_URL}/api/auth/logout`, {
+                  method: 'POST',
+                  headers: {
+                      'Authorization': `Bearer ${localStorage.getItem('snapify_token')}`,
+                      'Content-Type': 'application/json'
+                  }
+              });
+          } catch (error) {
+              console.warn('Logout API call failed:', error);
+          }
+      }
+
       setCurrentUser(null);
       setGuestName('');
       setView('landing');
@@ -681,8 +696,8 @@ export default function App() {
       clearDeviceFingerprint();
       if (typeof window !== 'undefined') {
           const url = new URL(window.location.href);
-          url.search = ""; 
-          window.history.pushState({}, '', url.toString()); 
+          url.search = "";
+          window.history.pushState({}, '', url.toString());
           window.location.href = '/';
       }
   };
@@ -715,9 +730,8 @@ export default function App() {
       <ShareTargetHandler onShareReceive={handleIncomingShare} />
       <ReloadPrompt />
 
-      {view !== 'landing' && (
-        <div className="flex-shrink-0 z-50 w-full bg-slate-50/95 backdrop-blur-md border-b border-slate-200">
-              <Navigation
+      <div className="flex-shrink-0 z-50 w-full bg-slate-50/95 backdrop-blur-md border-b border-slate-200">
+            <Navigation
                  currentUser={currentUser}
                  guestName={guestName}
                  view={view}
@@ -737,10 +751,11 @@ export default function App() {
                  t={t}
               />
 
-              {/* Admin Status & Support Chat */}
-              <div className="absolute top-4 right-4 flex items-center gap-3 z-60">
-                {/* Admin Status Indicator */}
-                {adminStatus.length > 0 && (
+
+              {/* Admin Status & Support Chat - Show for all logged-in users */}
+              {currentUser && (
+                <div className="absolute top-4 right-4 flex items-center gap-3 z-60">
+                  {/* Admin Status Indicator - Always show for logged-in users */}
                   <div className="flex items-center gap-2 bg-white/90 backdrop-blur rounded-full px-3 py-1.5 shadow-sm border border-slate-200">
                     <div className="flex items-center gap-1">
                       <div className={`w-2 h-2 rounded-full ${adminStatus.some(a => a.online) ? 'bg-green-500' : 'bg-red-500'}`}></div>
@@ -749,23 +764,22 @@ export default function App() {
                       </span>
                     </div>
                   </div>
-                )}
 
-                {/* Support Chat Button */}
-                <button
-                  onClick={() => setShowSupportChat(true)}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-full p-2.5 shadow-lg hover:shadow-xl transition-all"
-                  title="Contact Support"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                  </svg>
-                </button>
-              </div>
+                  {/* Support Chat Button */}
+                  <button
+                    onClick={() => setShowSupportChat(true)}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-full p-2.5 shadow-lg hover:shadow-xl transition-all"
+                    title="Contact Support"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                    </svg>
+                  </button>
+                </div>
+              )}
         </div>
-      )}
 
-      <div className="flex-1 overflow-y-auto overflow-x-hidden scroll-smooth w-full relative no-scrollbar">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden scroll-smooth w-full relative no-scrollbar">
           {view === 'landing' ? (
             <div className="min-h-full w-full">
               <LandingPage
@@ -847,7 +861,7 @@ export default function App() {
           )}
       </div>
 
-      {view !== 'landing' && <PWAInstallPrompt t={t} />}
+      <PWAInstallPrompt t={t} />
 
       <input type="file" ref={fileInputRef} className="hidden" accept="image/*,video/*" onChange={handleFileUpload} />
       <input key="camera-input-v2" type="file" ref={cameraInputRef} className="hidden" accept="image/*" capture="environment" onChange={handleFileUpload} />

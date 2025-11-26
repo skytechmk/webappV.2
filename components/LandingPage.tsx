@@ -4,11 +4,8 @@ import {
   Cast, Shield, Aperture, ArrowRight, Play, CheckCircle2
 } from 'lucide-react';
 import { Language, TranslateFn, TierLevel } from '../types';
-import { HERO_IMAGES, getPricingTiers } from '../constants';
-import { PricingCard } from './PricingCard';
+import { HERO_IMAGES } from '../constants';
 import { TermsModal } from './TermsModal';
-import { guestReviews } from '../guestReviews';
-import { getUserLocation, getCountryLanguage } from '../services/geolocationService';
 import { api } from '../services/api';
 
 interface LandingPageProps {
@@ -46,9 +43,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   const [isPhotographer, setIsPhotographer] = useState(false);
   const [studioName, setStudioName] = useState('');
 
-  // Reviews State
-  const [dynamicReviews, setDynamicReviews] = useState<any[]>([]);
-  const [reviewsLoading, setReviewsLoading] = useState(true);
 
   useEffect(() => {
     // Hero Rotator
@@ -116,49 +110,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     }
   }, []);
 
-  // Load location-based reviews with caching
-  useEffect(() => {
-    const loadReviews = async () => {
-      try {
-        const location = await getUserLocation();
-        if (location) {
-          const cacheKey = `snapify_reviews_${location.countryCode}`;
-          const cached = localStorage.getItem(cacheKey);
-          if (cached) {
-            const parsed = JSON.parse(cached);
-            if (Date.now() - parsed.timestamp < 24 * 60 * 60 * 1000) { // 24 hours
-              setDynamicReviews(parsed.reviews);
-              setReviewsLoading(false);
-              return;
-            }
-          }
-
-          const language = getCountryLanguage(location.countryCode);
-          const generatedReviews = await api.generateGuestReviews(location.country, language, 6);
-          if (generatedReviews.length > 0) {
-            setDynamicReviews(generatedReviews);
-            localStorage.setItem(cacheKey, JSON.stringify({
-              reviews: generatedReviews,
-              timestamp: Date.now()
-            }));
-          } else {
-            // Fallback to default reviews
-            setDynamicReviews(guestReviews.slice(0, 6));
-          }
-        } else {
-          // Fallback
-          setDynamicReviews(guestReviews.slice(0, 6));
-        }
-      } catch (error) {
-        console.warn('Failed to load dynamic reviews:', error);
-        setDynamicReviews(guestReviews.slice(0, 6));
-      } finally {
-        setReviewsLoading(false);
-      }
-    };
-
-    loadReviews();
-  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -546,82 +497,43 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         </div>
       </section>
 
-      {/* --- GUEST REVIEWS / SOCIAL PROOF --- */}
-      <section className="py-24 bg-[#0A0A0A] border-y border-white/5">
-        <div className="max-w-7xl mx-auto px-6">
-            <div className="text-center mb-16">
-                <h2 className="text-3xl md:text-5xl font-black mb-4">Loved by <span className="text-emerald-400">Our Guests</span></h2>
-                <p className="text-slate-400 max-w-2xl mx-auto text-lg">See what guests from across North Macedonia say about SnapifY</p>
-            </div>
 
-            <div className="grid md:grid-cols-3 gap-8">
-                {reviewsLoading ? (
-                    // Loading skeleton
-                    Array.from({ length: 6 }).map((_, i) => (
-                        <div key={i} className="bg-[#111] border border-white/10 p-8 rounded-3xl animate-pulse">
-                            <div className="h-6 bg-white/10 rounded-full mb-4"></div>
-                            <div className="h-4 bg-white/5 rounded mb-2"></div>
-                            <div className="h-4 bg-white/5 rounded mb-2"></div>
-                            <div className="h-4 bg-white/5 rounded w-3/4"></div>
-                        </div>
-                    ))
-                ) : (
-                    dynamicReviews.map((review, i) => (
-                        <div key={i} className="bg-[#111] border border-white/10 p-8 rounded-3xl hover:border-emerald-500/30 transition-all group hover:-translate-y-1 duration-300">
-                            <div className="mb-4">
-                                <span className="inline-block px-2 py-1 text-xs font-bold text-emerald-300 bg-emerald-500/10 border border-emerald-500/20 rounded-full uppercase tracking-wider">
-                                    {review.ethnicity || review.tone} • {review.language || 'Local'}
-                                </span>
-                            </div>
-                            <blockquote className="text-slate-300 text-lg leading-relaxed mb-6 italic">
-                                "{review.translation || review.review}"
-                            </blockquote>
-                        </div>
-                    ))
-                )}
-            </div>
-
-            {/* Trust indicators */}
-            <div className="mt-16 pt-16 border-t border-white/10">
-                <div className="flex flex-wrap items-center justify-center gap-8 opacity-60">
-                    <div className="text-center">
-                        <div className="text-2xl font-bold text-emerald-400">500+</div>
-                        <div className="text-xs text-slate-400 uppercase tracking-wider">Events This Month</div>
-                    </div>
-                    <div className="w-px h-8 bg-white/10 hidden md:block" />
-                    <div className="text-center">
-                        <div className="text-2xl font-bold text-emerald-400">4.9★</div>
-                        <div className="text-xs text-slate-400 uppercase tracking-wider">Average Rating</div>
-                    </div>
-                    <div className="w-px h-8 bg-white/10 hidden md:block" />
-                    <div className="text-center">
-                        <div className="text-2xl font-bold text-emerald-400">99.9%</div>
-                        <div className="text-xs text-slate-400 uppercase tracking-wider">Uptime</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-      </section>
-
-      {/* --- PRICING --- */}
+      {/* --- CONTACT SALES --- */}
       <section id="pricing" className="py-24 px-6 max-w-7xl mx-auto scroll-mt-20">
-        <h2 className="text-3xl md:text-5xl font-black mb-6 text-center">{t('pricingTitle')}</h2>
-        <p className="text-slate-400 text-center max-w-2xl mx-auto mb-16 text-lg">Choose the perfect plan for your event. No hidden fees.</p>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {getPricingTiers(t).map(tier => (
-                <PricingCard
-                    key={tier.id}
-                    tier={tier}
-                    t={t}
-                    onSelect={(id) => {
-                        if (id === TierLevel.FREE) {
-                            setIsSignUp(true); 
-                            scrollToAuth();
-                        } else {
-                            onContactSales(id);
-                        }
-                    }}
-                />
+        <h2 className="text-3xl md:text-5xl font-black mb-6 text-center">Contact Sales</h2>
+        <p className="text-slate-400 text-center max-w-2xl mx-auto mb-16 text-lg">Get in touch with our team to discuss your event needs.</p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
+            {[
+                {
+                    icon: '💬',
+                    method: 'WhatsApp',
+                    contact: '+41 77 958 68 45',
+                    link: 'https://wa.me/41779586845'
+                },
+                {
+                    icon: '📱',
+                    method: 'Viber',
+                    contact: '+41 77 958 68 45',
+                    link: 'viber://chat?number=%2B41779586845'
+                },
+                {
+                    icon: '✉️',
+                    method: 'Email',
+                    contact: 'admin@skytech.mk',
+                    link: 'mailto:admin@skytech.mk'
+                }
+            ].map((contact, i) => (
+                <a
+                    key={i}
+                    href={contact.link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="bg-[#111] border border-white/10 p-8 rounded-3xl text-center hover:border-indigo-500/30 transition-all group hover:-translate-y-1 duration-300 shadow-2xl shadow-black"
+                >
+                    <div className="text-4xl mb-4">{contact.icon}</div>
+                    <h3 className="text-xl font-bold mb-2 text-white">{contact.method}</h3>
+                    <p className="text-slate-400">{contact.contact}</p>
+                </a>
             ))}
         </div>
       </section>
