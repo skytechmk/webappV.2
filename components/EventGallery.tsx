@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { VirtuosoGrid } from 'react-virtuoso';
 import { ShieldCheck, Download, Calendar, LayoutGrid, Camera, Video, Star, Share2, Upload, CheckCircle, Link as LinkIcon, Play, Heart, X, Pause, BookOpen, Send, Lock, Search, ScanFace, Loader2, Trash2, CheckSquare, Square, ChevronLeft, ChevronRight, MessageSquare, Globe, AlertTriangle, Plus, ImagePlus, MapPin } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Event, User, UserRole, MediaItem, TranslateFn, TierLevel, GuestbookEntry, Comment, Vendor } from '../types';
@@ -567,94 +568,120 @@ export const EventGallery: React.FC<EventGalleryProps> = ({
       } catch (error) {} finally { setIsDeleting(false); }
   };
 
-  // HELPER: Render Grid with Ads
-  const renderGrid = () => {
-    const gridItems = [];
+  // HELPER: Create Grid Items with Ads
+  const createGridItems = (): (MediaItem | { type: 'ad', vendor: Vendor } | { type: 'add-memory' })[] => {
+    const gridItems: (MediaItem | { type: 'ad', vendor: Vendor } | { type: 'add-memory' })[] = [];
     let adIndex = 0;
-    
+
+    // Add "Add Memory" card if applicable
+    if ((isOwner || currentUser?.role === UserRole.ADMIN || currentUser) && !isBulkDeleteMode && !searchQuery) {
+      gridItems.push({ type: 'add-memory' });
+    }
+
     for (let i = 0; i < displayMedia.length; i++) {
         const item = displayMedia[i];
-        
+
         // Inject Ad every 8 items if we have vendors and not in bulk mode
         if (vendors.length > 0 && !isBulkDeleteMode && i > 0 && i % 8 === 0) {
             const vendor = vendors[adIndex % vendors.length];
-            gridItems.push(
-                <VendorAdCard key={`ad-${i}`} vendor={vendor} />
-            );
+            gridItems.push({ type: 'ad', vendor });
             adIndex++;
         }
 
-        gridItems.push(
-          <div key={item.id} className="break-inside-avoid relative group rounded-2xl overflow-hidden bg-slate-100 shadow-sm hover:shadow-md transition-all cursor-pointer mb-4" onClick={() => !isBulkDeleteMode && openLightbox(i)}>
-            
-            {/* Bulk Select Overlay - Only if mode active AND user can manage this specific item */}
-            {isBulkDeleteMode && canManageItem(item) && (
-              <div className="absolute top-0 left-0 right-0 bottom-0 z-20 bg-black/10 flex items-start justify-end p-3">
-                <button onClick={(e) => { e.stopPropagation(); toggleMediaSelection(item.id); }} className={`w-6 h-6 rounded-full flex items-center justify-center transition-all shadow-sm ${selectedMedia.has(item.id) ? 'bg-indigo-600 text-white' : 'bg-white text-slate-400'}`}>
-                  {selectedMedia.has(item.id) ? <CheckSquare size={14} /> : <Square size={14} />}
-                </button>
-              </div>
-            )}
-
-            {item.type === 'video' ? (
-                <VideoGridItem item={item} onClick={() => !isBulkDeleteMode && openLightbox(i)} />
-            ) : (
-              // Updated Image Grid Item with Fallback
-              <div className="w-full h-auto bg-slate-200 relative min-h-[100px]">
-                  <img
-                      src={item.previewUrl || item.url}
-                      alt={item.caption}
-                      className="w-full h-full object-cover"
-                      style={{ transform: getOrientationTransform(item.orientation) }}
-                      loading="lazy"
-                      onError={(e) => {
-                          e.currentTarget.style.display = 'none';
-                          e.currentTarget.parentElement?.querySelector('.error-placeholder')?.classList.remove('hidden');
-                      }}
-                  />
-                  <div className="error-placeholder hidden absolute inset-0 flex items-center justify-center text-slate-400 p-2 text-center bg-slate-100">
-                      <span className="text-[10px] font-bold">{item.caption || 'Image unavailable'}</span>
-                  </div>
-              </div>
-            )}
-            {item.isWatermarked && item.watermarkText && (
-              <div className="absolute bottom-2 right-2 pointer-events-none">
-                <p className="text-white/60 text-[10px] font-bold uppercase tracking-widest drop-shadow-md px-1.5 py-0.5 rounded bg-black/30 backdrop-blur-sm">{item.watermarkText}</p>
-              </div>
-            )}
-            
-            {/* UPDATED: Privacy Lock Icon */}
-            {item.privacy === 'private' && (
-                <div className="absolute top-2 right-2 bg-black/60 text-white p-1 rounded-full shadow-sm backdrop-blur-sm z-10">
-                    <Lock size={12} />
-                </div>
-            )}
-
-            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-4 pointer-events-none">
-              <p className="text-white text-sm font-medium truncate">{item.caption}</p>
-              <div className="flex justify-between items-end mt-0.5">
-                  <p className="text-white/60 text-xs">by {item.uploaderName}</p>
-                  {item.comments && item.comments.length > 0 && (
-                      <div className="flex items-center gap-1 text-white/80 text-xs">
-                          <MessageSquare size={12} /> {item.comments.length}
-                      </div>
-                  )}
-              </div>
-            </div>
-            {!isBulkDeleteMode && (
-                <button onClick={(e) => { e.stopPropagation(); onLike(item); }} className="absolute bottom-3 right-3 bg-white/90 backdrop-blur-md rounded-full p-2 text-slate-400 shadow-lg hover:text-red-500 hover:scale-110 transition-all flex items-center gap-1 pointer-events-auto z-10">
-                    <Heart size={16} className={item.likes ? 'fill-red-500 text-red-500' : ''} />
-                    {item.likes ? <span className="text-xs font-bold text-red-500">{item.likes}</span> : null}
-                </button>
-            )}
-            {/* Star Cover Icon - Host Only */}
-            {(isOwner || currentUser?.role === UserRole.ADMIN) && item.type === 'image' && !isBulkDeleteMode && (
-              <button onClick={(e) => { e.stopPropagation(); onSetCover(item); }} className="absolute top-3 left-3 bg-black/40 backdrop-blur-md rounded-full p-1.5 text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-indigo-600 pointer-events-auto z-10"><Star size={14} /></button>
-            )}
-          </div>
-        );
+        gridItems.push(item);
     }
     return gridItems;
+  };
+
+  const gridItems = createGridItems();
+
+  const renderGridItem = (index: number) => {
+    const item = gridItems[index];
+    if (item.type === 'add-memory') {
+      return (
+        <div onClick={() => onUpload('upload')} className="break-inside-avoid relative group rounded-2xl overflow-hidden bg-gradient-to-br from-indigo-50 to-white border-2 border-dashed border-indigo-200 shadow-sm hover:shadow-md hover:border-indigo-400 transition-all cursor-pointer flex flex-col items-center justify-center min-h-[250px] animate-in fade-in slide-in-from-bottom-4 mb-4">
+          <div className="w-16 h-16 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center mb-4 shadow-inner group-hover:scale-110 transition-transform duration-300">
+            <Plus size={32} strokeWidth={3} />
+          </div>
+          <h4 className="font-black text-indigo-900 text-lg">{t('addMemory')}</h4>
+          <p className="text-indigo-500/80 text-xs font-bold uppercase tracking-wider mt-1">{t('tapToUpload')}</p>
+        </div>
+      );
+    } else if (item.type === 'ad') {
+      return <VendorAdCard key={`ad-${index}`} vendor={item.vendor} />;
+    } else {
+      const mediaItem = item as MediaItem;
+      const mediaIndex = displayMedia.indexOf(mediaItem);
+      return (
+        <div key={mediaItem.id} className="break-inside-avoid relative group rounded-2xl overflow-hidden bg-slate-100 shadow-sm hover:shadow-md transition-all cursor-pointer mb-4" onClick={() => !isBulkDeleteMode && openLightbox(mediaIndex)}>
+
+          {/* Bulk Select Overlay - Only if mode active AND user can manage this specific item */}
+          {isBulkDeleteMode && canManageItem(mediaItem) && (
+            <div className="absolute top-0 left-0 right-0 bottom-0 z-20 bg-black/10 flex items-start justify-end p-3">
+              <button onClick={(e) => { e.stopPropagation(); toggleMediaSelection(mediaItem.id); }} className={`w-6 h-6 rounded-full flex items-center justify-center transition-all shadow-sm ${selectedMedia.has(mediaItem.id) ? 'bg-indigo-600 text-white' : 'bg-white text-slate-400'}`}>
+                {selectedMedia.has(mediaItem.id) ? <CheckSquare size={14} /> : <Square size={14} />}
+              </button>
+            </div>
+          )}
+
+          {mediaItem.type === 'video' ? (
+              <VideoGridItem item={mediaItem} onClick={() => !isBulkDeleteMode && openLightbox(mediaIndex)} />
+          ) : (
+            // Updated Image Grid Item with Fallback
+            <div className="w-full h-auto bg-slate-200 relative min-h-[100px]">
+                <img
+                    src={mediaItem.previewUrl || mediaItem.url}
+                    alt={mediaItem.caption}
+                    className="w-full h-full object-cover"
+                    style={{ transform: getOrientationTransform(mediaItem.orientation) }}
+                    loading="lazy"
+                    onError={(e) => {
+                        e.currentTarget.style.display = 'none';
+                        e.currentTarget.parentElement?.querySelector('.error-placeholder')?.classList.remove('hidden');
+                    }}
+                />
+                <div className="error-placeholder hidden absolute inset-0 flex items-center justify-center text-slate-400 p-2 text-center bg-slate-100">
+                    <span className="text-[10px] font-bold">{mediaItem.caption || 'Image unavailable'}</span>
+                </div>
+            </div>
+          )}
+          {mediaItem.isWatermarked && mediaItem.watermarkText && (
+            <div className="absolute bottom-2 right-2 pointer-events-none">
+              <p className="text-white/60 text-[10px] font-bold uppercase tracking-widest drop-shadow-md px-1.5 py-0.5 rounded bg-black/30 backdrop-blur-sm">{mediaItem.watermarkText}</p>
+            </div>
+          )}
+
+          {/* UPDATED: Privacy Lock Icon */}
+          {mediaItem.privacy === 'private' && (
+              <div className="absolute top-2 right-2 bg-black/60 text-white p-1 rounded-full shadow-sm backdrop-blur-sm z-10">
+                  <Lock size={12} />
+              </div>
+          )}
+
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-4 pointer-events-none">
+            <p className="text-white text-sm font-medium truncate">{mediaItem.caption}</p>
+            <div className="flex justify-between items-end mt-0.5">
+                <p className="text-white/60 text-xs">by {mediaItem.uploaderName}</p>
+                {mediaItem.comments && mediaItem.comments.length > 0 && (
+                    <div className="flex items-center gap-1 text-white/80 text-xs">
+                        <MessageSquare size={12} /> {mediaItem.comments.length}
+                    </div>
+                )}
+            </div>
+          </div>
+          {!isBulkDeleteMode && (
+              <button onClick={(e) => { e.stopPropagation(); onLike(mediaItem); }} className="absolute bottom-3 right-3 bg-white/90 backdrop-blur-md rounded-full p-2 text-slate-400 shadow-lg hover:text-red-500 hover:scale-110 transition-all flex items-center gap-1 pointer-events-auto z-10">
+                  <Heart size={16} className={mediaItem.likes ? 'fill-red-500 text-red-500' : ''} />
+                  {item.likes ? <span className="text-xs font-bold text-red-500">{mediaItem.likes}</span> : null}
+              </button>
+          )}
+          {/* Star Cover Icon - Host Only */}
+          {(isOwner || currentUser?.role === UserRole.ADMIN) && mediaItem.type === 'image' && !isBulkDeleteMode && (
+            <button onClick={(e) => { e.stopPropagation(); onSetCover(mediaItem); }} className="absolute top-3 left-3 bg-black/40 backdrop-blur-md rounded-full p-1.5 text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-indigo-600 pointer-events-auto z-10"><Star size={14} /></button>
+          )}
+        </div>
+      );
+    }
   };
 
   if (isPinLocked) {
@@ -850,8 +877,14 @@ export const EventGallery: React.FC<EventGalleryProps> = ({
               </div>
           )}
 
-          {/* UPDATED: Render Grid with Injected Ads */}
-          {renderGrid()}
+          {/* UPDATED: Render Grid with Injected Ads using Virtuoso */}
+          <VirtuosoGrid
+            totalCount={gridItems.length}
+            itemContent={renderGridItem}
+            listClassName="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
+            itemClassName=""
+            style={{ height: '100%' }}
+          />
         </div>
 
         {/* Refined Empty State Logic */}
