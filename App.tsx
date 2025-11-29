@@ -183,6 +183,39 @@ export default function App() {
 
     socketService.on('cache_invalidate', handleCacheInvalidate);
 
+    // MEDIA UPLOAD REAL-TIME UPDATES
+    const handleMediaUploaded = (newItem: MediaItem) => {
+      console.log('Media uploaded event received:', newItem);
+      setEvents(prev => prev.map(event => {
+        if (event.id === newItem.eventId) {
+          // Add new media item to the event
+          return {
+            ...event,
+            media: [newItem, ...event.media]
+          };
+        }
+        return event;
+      }));
+    };
+
+    const handleMediaProcessed = (data: { id: string, previewUrl: string, url?: string }) => {
+      console.log('Media processed event received:', data);
+      setEvents(prev => prev.map(event => {
+        if (event.media.some(m => m.id === data.id)) {
+          return {
+            ...event,
+            media: event.media.map(m =>
+              m.id === data.id ? { ...m, isProcessing: false, previewUrl: data.previewUrl, url: data.url || m.url } : m
+            )
+          };
+        }
+        return event;
+      }));
+    };
+
+    socketService.on('media_uploaded', handleMediaUploaded);
+    socketService.on('media_processed', handleMediaProcessed);
+
     // Load initial admin status
     const loadAdminStatus = async () => {
       try {
@@ -211,6 +244,8 @@ export default function App() {
       socketService.off('force_client_reload', handleForceReload);
       socketService.off('admin_status_update', handleAdminStatusUpdate);
       socketService.off('cache_invalidate', handleCacheInvalidate);
+      socketService.off('media_uploaded', handleMediaUploaded);
+      socketService.off('media_processed', handleMediaProcessed);
     };
   }, []);
 
