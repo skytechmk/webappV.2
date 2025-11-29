@@ -6,12 +6,12 @@ import { getExifOrientation } from '../utils/imageProcessing';
 interface MediaReviewModalProps {
   type: 'image' | 'video';
   src: string;
-  onConfirm: (caption: string, privacy: 'public' | 'private') => void;
+  onConfirm: (caption: string, privacy: 'public' | 'private', rotation?: number) => void;
   onRetake: () => void;
   onCancel: () => void;
   isUploading: boolean;
-  uploadProgress?: number; 
-  isRegistered: boolean; 
+  uploadProgress?: number;
+  isRegistered: boolean;
   t: TranslateFn;
   file?: File; // Pass the file object to check EXIF
 }
@@ -34,16 +34,8 @@ export const MediaReviewModal: React.FC<MediaReviewModalProps> = ({
   const imgRef = useRef<HTMLImageElement>(null);
 
   useEffect(() => {
-    if (type === 'image' && file) {
-        getExifOrientation(file).then((orientation) => {
-            switch (orientation) {
-                case 3: setRotation(180); break;
-                case 6: setRotation(90); break;
-                case 8: setRotation(-90); break;
-                default: setRotation(0); break;
-            }
-        });
-    }
+    // Temporarily disable EXIF correction to test if browser handles it correctly
+    setRotation(0);
   }, [file, type]);
 
   const handlePrivacyChange = (newPrivacy: 'public' | 'private') => {
@@ -156,8 +148,8 @@ export const MediaReviewModal: React.FC<MediaReviewModalProps> = ({
             <RotateCcw size={18} />
             {t('retry') || "Retake"}
           </button>
-          <button 
-            onClick={() => onConfirm(caption, privacy)}
+          <button
+            onClick={() => onConfirm(caption, privacy, rotation)}
             disabled={isUploading}
             className="flex-[2] py-3.5 bg-indigo-600 text-white font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-indigo-700 transition-colors disabled:opacity-70 shadow-lg shadow-indigo-900/30 relative overflow-hidden"
           >

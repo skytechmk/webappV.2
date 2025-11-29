@@ -42,9 +42,10 @@ const API_URL = import.meta.env.DEV ? (import.meta.env.VITE_API_URL || 'http://l
 // Helper function to convert EXIF orientation to degrees
 const getRotationFromExif = (orientation: number): number => {
   switch (orientation) {
-    case 3: return 180;
-    case 6: return 90;
-    case 8: return -90;
+    case 1: return 0;     // Normal
+    case 3: return 180;   // Upside down
+    case 6: return 90;    // 90° CW stored - need 90° CW correction
+    case 8: return -90;   // 90° CCW stored - need 90° CCW correction
     default: return 0;
   }
 };
@@ -652,36 +653,30 @@ export default function App() {
         uploadFile = new File([blob], "capture.jpg", { type: "image/jpeg" });
       }
 
-      // Apply combined rotation (EXIF + manual) if needed
-      if (type === 'image' && uploadFile) {
-        // Get EXIF orientation from original file
-        const exifOrientation = file ? await getExifOrientation(file) : 1;
-        const totalRotation = rotation + getRotationFromExif(exifOrientation);
+      // Apply manual rotation only (temporarily disable EXIF correction)
+      if (type === 'image' && uploadFile && rotation !== 0) {
+        const img = new Image();
+        img.src = URL.createObjectURL(uploadFile);
+        await new Promise(resolve => { img.onload = resolve; });
 
-        if (totalRotation !== 0) {
-          const img = new Image();
-          img.src = URL.createObjectURL(uploadFile);
-          await new Promise(resolve => { img.onload = resolve; });
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          // Set canvas size based on rotation
+          const needsSwap = Math.abs(rotation) === 90 || Math.abs(rotation) === 270;
+          canvas.width = needsSwap ? img.height : img.width;
+          canvas.height = needsSwap ? img.width : img.height;
 
-          const canvas = document.createElement('canvas');
-          const ctx = canvas.getContext('2d');
-          if (ctx) {
-            // Set canvas size based on total rotation
-            const needsSwap = Math.abs(totalRotation) === 90 || Math.abs(totalRotation) === 270;
-            canvas.width = needsSwap ? img.height : img.width;
-            canvas.height = needsSwap ? img.width : img.height;
+          ctx.save();
+          ctx.translate(canvas.width / 2, canvas.height / 2);
+          ctx.rotate((rotation * Math.PI) / 180);
+          ctx.drawImage(img, -img.width / 2, -img.height / 2);
+          ctx.restore();
 
-            ctx.save();
-            ctx.translate(canvas.width / 2, canvas.height / 2);
-            ctx.rotate((totalRotation * Math.PI) / 180);
-            ctx.drawImage(img, -img.width / 2, -img.height / 2);
-            ctx.restore();
-
-            const rotatedBlob = await new Promise<Blob>(resolve => {
-              canvas.toBlob(resolve, 'image/jpeg', 0.85);
-            });
-            uploadFile = new File([rotatedBlob], "final.jpg", { type: "image/jpeg" });
-          }
+          const rotatedBlob = await new Promise<Blob>(resolve => {
+            canvas.toBlob(resolve, 'image/jpeg', 0.85);
+          });
+          uploadFile = new File([rotatedBlob], "final.jpg", { type: "image/jpeg" });
         }
       }
 
