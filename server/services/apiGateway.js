@@ -22,7 +22,15 @@ class ApiGateway {
             next();
         });
 
-        // CORS configuration
+        // CORS configuration - allow all origins for shared events
+        this.app.use('/api/events/:id', cors({
+            origin: true, // Allow all origins for shared events
+            credentials: false, // No credentials needed for public events
+            methods: ['GET', 'OPTIONS'],
+            allowedHeaders: ['Content-Type']
+        }));
+
+        // Standard CORS for other routes
         this.app.use(cors({
             origin: config.ALLOWED_ORIGINS || ['http://localhost:3000', 'http://localhost:5173'],
             credentials: true,
