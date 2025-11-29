@@ -26,7 +26,7 @@ const ReloadPrompt = lazy(() => import('./components/ReloadPrompt').then(module 
 const SupportChat = lazy(() => import('./components/SupportChat').then(module => ({ default: module.SupportChat })));
 
 // Keep lightweight utilities as direct imports
-import { applyWatermark, processImage } from './utils/imageProcessing';
+import { applyWatermark, processImage, getExifOrientation } from './utils/imageProcessing';
 import { clearDeviceFingerprint } from './utils/deviceFingerprint';
 import { socketService } from './services/socketService';
 import { validateGuestName, sanitizeInput, validateEmail, validatePassword, validateEventTitle, validateEventDescription } from './utils/validation';
@@ -38,6 +38,16 @@ const env: any = (import.meta as any).env || {};
 const API_URL = import.meta.env.DEV ? (import.meta.env.VITE_API_URL || 'http://localhost:3001') : '';
 
 // Using imported validation functions from utils/validation.ts
+
+// Helper function to convert EXIF orientation to degrees
+const getRotationFromExif = (orientation: number): number => {
+  switch (orientation) {
+    case 3: return 180;
+    case 6: return 90;
+    case 8: return -90;
+    default: return 0;
+  }
+};
 
 const safeSetItem = (key: string, value: string) => {
   try { localStorage.setItem(key, value); } catch (error) { console.warn('Failed to save to localStorage:', error); }
@@ -642,34 +652,36 @@ export default function App() {
         uploadFile = new File([blob], "capture.jpg", { type: "image/jpeg" });
       }
 
-      // Apply rotation if needed
-      if (rotation !== 0 && type === 'image' && uploadFile) {
-        const img = new Image();
-        img.src = URL.createObjectURL(uploadFile);
-        await new Promise(resolve => { img.onload = resolve; });
+      // Apply combined rotation (EXIF + manual) if needed
+      if (type === 'image' && uploadFile) {
+        // Get EXIF orientation from original file
+        const exifOrientation = file ? await getExifOrientation(file) : 1;
+        const totalRotation = rotation + getRotationFromExif(exifOrientation);
 
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          // Set canvas size based on rotation
-          if (Math.abs(rotation) === 90) {
-            canvas.width = img.height;
-            canvas.height = img.width;
-          } else {
-            canvas.width = img.width;
-            canvas.height = img.height;
+        if (totalRotation !== 0) {
+          const img = new Image();
+          img.src = URL.createObjectURL(uploadFile);
+          await new Promise(resolve => { img.onload = resolve; });
+
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            // Set canvas size based on total rotation
+            const needsSwap = Math.abs(totalRotation) === 90 || Math.abs(totalRotation) === 270;
+            canvas.width = needsSwap ? img.height : img.width;
+            canvas.height = needsSwap ? img.width : img.height;
+
+            ctx.save();
+            ctx.translate(canvas.width / 2, canvas.height / 2);
+            ctx.rotate((totalRotation * Math.PI) / 180);
+            ctx.drawImage(img, -img.width / 2, -img.height / 2);
+            ctx.restore();
+
+            const rotatedBlob = await new Promise<Blob>(resolve => {
+              canvas.toBlob(resolve, 'image/jpeg', 0.85);
+            });
+            uploadFile = new File([rotatedBlob], "final.jpg", { type: "image/jpeg" });
           }
-
-          ctx.save();
-          ctx.translate(canvas.width / 2, canvas.height / 2);
-          ctx.rotate((rotation * Math.PI) / 180);
-          ctx.drawImage(img, -img.width / 2, -img.height / 2);
-          ctx.restore();
-
-          const rotatedBlob = await new Promise<Blob>(resolve => {
-            canvas.toBlob(resolve, 'image/jpeg', 0.85);
-          });
-          uploadFile = new File([rotatedBlob], "rotated.jpg", { type: "image/jpeg" });
         }
       }
 
