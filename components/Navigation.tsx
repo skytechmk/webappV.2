@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Globe, LogOut, User, Home, Settings, ShieldCheck, ArrowLeft, Menu, X } from 'lucide-react';
 import { User as UserType, UserRole, TranslateFn, Language, TIER_CONFIG } from '../types';
 
@@ -19,7 +19,6 @@ interface NavigationProps {
 }
 
 interface NavigationPropsExtended extends NavigationProps {
-  adminStatus?: {adminId: string, online: boolean, lastSeen: number}[];
 }
 
 export const Navigation: React.FC<NavigationPropsExtended> = ({
@@ -35,12 +34,16 @@ export const Navigation: React.FC<NavigationPropsExtended> = ({
   onBack,
   onToAdmin,
   onOpenSettings,
-  adminStatus = [],
   t
 }) => {
-  const [menuOpen, setMenuOpen] = React.useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const toggleMenu = () => setMenuOpen(!menuOpen);
+
+  const getUserInitial = (user: UserType | null): string => {
+    if (!user || !user.name) return 'U';
+    return user.name.charAt(0).toUpperCase();
+  };
 
   const renderLanguageSelector = () => (
     <div className="flex items-center bg-slate-100 rounded-lg p-1">
@@ -115,7 +118,7 @@ export const Navigation: React.FC<NavigationPropsExtended> = ({
                  )}
                  <div className="flex items-center gap-2">
                      <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-sm">
-                         {currentUser.name.charAt(0).toUpperCase()}
+                         {getUserInitial(currentUser)}
                      </div>
                      <span className="text-sm font-bold text-slate-700">{currentUser.name}</span>
                  </div>
@@ -132,11 +135,11 @@ export const Navigation: React.FC<NavigationPropsExtended> = ({
 
       {/* Mobile Menu Toggle */}
       <div className="md:hidden flex items-center gap-2">
-          {currentUser && (
-              <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-sm border border-indigo-200">
-                  {currentUser.name.charAt(0).toUpperCase()}
-              </div>
-          )}
+           {currentUser && (
+               <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-sm border border-indigo-200">
+                   {getUserInitial(currentUser)}
+               </div>
+           )}
           <button onClick={toggleMenu} className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
               {menuOpen ? <X size={24} /> : <Menu size={24} />}
           </button>
@@ -151,7 +154,7 @@ export const Navigation: React.FC<NavigationPropsExtended> = ({
                   <>
                       <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl">
                           <div className="w-10 h-10 rounded-full bg-white shadow-sm text-indigo-600 flex items-center justify-center font-bold text-lg">
-                              {currentUser.name.charAt(0).toUpperCase()}
+                              {getUserInitial(currentUser)}
                           </div>
                           <div>
                               <p className="font-bold text-slate-900">{currentUser.name}</p>

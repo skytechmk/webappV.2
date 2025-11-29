@@ -1,5 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import React, { useState, useEffect, useRef, Suspense, lazy } from 'react';
 // @ts-ignore
 import JSZip from 'jszip';
 // @ts-ignore
@@ -7,23 +6,27 @@ import { jwtDecode } from 'jwt-decode';
 import { User, Event, MediaItem, UserRole, TierLevel, Language, TranslateFn, TIER_CONFIG, getTierConfigForUser, getTierConfig } from './types';
 import { api } from './services/api';
 import { TRANSLATIONS } from './constants';
-import { AdminDashboard } from './components/AdminDashboard';
-import { Navigation } from './components/Navigation';
-import { LandingPage } from './components/LandingPage';
-import { UserDashboard } from './components/UserDashboard';
-import { EventGallery } from './components/EventGallery';
-import { CreateEventModal } from './components/CreateEventModal';
-import { ContactModal } from './components/ContactModal';
-import { GuestLoginModal } from './components/GuestLoginModal';
-import { StudioSettingsModal } from './components/StudioSettingsModal';
-import { MediaReviewModal } from './components/MediaReviewModal';
-import { LiveSlideshow } from './components/LiveSlideshow';
-import { PWAInstallPrompt } from './components/PWAInstallPrompt';
-import { OfflineBanner } from './components/OfflineBanner';
-import { ShareTargetHandler } from './components/ShareTargetHandler';
-import { ReloadPrompt } from './components/ReloadPrompt';
-import { SupportChat } from './components/SupportChat';
-import { applyWatermark } from './utils/imageProcessing';
+
+// Lazy load heavy components for code splitting
+const AdminDashboard = lazy(() => import('./components/AdminDashboard').then(module => ({ default: module.AdminDashboard })));
+const Navigation = lazy(() => import('./components/Navigation').then(module => ({ default: module.Navigation })));
+const LandingPage = lazy(() => import('./components/LandingPage').then(module => ({ default: module.LandingPage })));
+const UserDashboard = lazy(() => import('./components/UserDashboard').then(module => ({ default: module.UserDashboard })));
+const EventGallery = lazy(() => import('./components/EventGallery').then(module => ({ default: module.EventGallery })));
+const CreateEventModal = lazy(() => import('./components/CreateEventModal').then(module => ({ default: module.CreateEventModal })));
+const ContactModal = lazy(() => import('./components/ContactModal').then(module => ({ default: module.ContactModal })));
+const GuestLoginModal = lazy(() => import('./components/GuestLoginModal').then(module => ({ default: module.GuestLoginModal })));
+const StudioSettingsModal = lazy(() => import('./components/StudioSettingsModal').then(module => ({ default: module.StudioSettingsModal })));
+const MediaReviewModal = lazy(() => import('./components/MediaReviewModal').then(module => ({ default: module.MediaReviewModal })));
+const LiveSlideshow = lazy(() => import('./components/LiveSlideshow').then(module => ({ default: module.LiveSlideshow })));
+const PWAInstallPrompt = lazy(() => import('./components/PWAInstallPrompt').then(module => ({ default: module.PWAInstallPrompt })));
+const OfflineBanner = lazy(() => import('./components/OfflineBanner').then(module => ({ default: module.OfflineBanner })));
+const ShareTargetHandler = lazy(() => import('./components/ShareTargetHandler').then(module => ({ default: module.ShareTargetHandler })));
+const ReloadPrompt = lazy(() => import('./components/ReloadPrompt').then(module => ({ default: module.ReloadPrompt })));
+const SupportChat = lazy(() => import('./components/SupportChat').then(module => ({ default: module.SupportChat })));
+
+// Keep lightweight utilities as direct imports
+import { applyWatermark, processImage } from './utils/imageProcessing';
 import { clearDeviceFingerprint } from './utils/deviceFingerprint';
 import { socketService } from './services/socketService';
 import { validateGuestName, sanitizeInput, validateEmail, validatePassword, validateEventTitle, validateEventDescription } from './utils/validation';
@@ -49,10 +52,10 @@ const safeRemoveItem = (key: string) => {
 };
 
 declare global {
-    interface Window {
-        google: any;
-        googleSignInInitialized?: boolean;
-    }
+  interface Window {
+    google: any;
+    googleSignInInitialized?: boolean;
+  }
 }
 
 export default function App() {
@@ -78,11 +81,11 @@ export default function App() {
   const [applyWatermarkState, setApplyWatermarkState] = useState(false);
   const [downloadingZip, setDownloadingZip] = useState(false);
 
-  const [previewMedia, setPreviewMedia] = useState<{ type: 'image'|'video', src: string, file?: File } | null>(null);
+  const [previewMedia, setPreviewMedia] = useState<{ type: 'image' | 'video', src: string, file?: File } | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
 
-  const [adminStatus, setAdminStatus] = useState<{adminId: string, online: boolean, lastSeen: number}[]>([]);
+  const [adminStatus, setAdminStatus] = useState<{ adminId: string, online: boolean, lastSeen: number }[]>([]);
   const [showSupportChat, setShowSupportChat] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -90,280 +93,290 @@ export default function App() {
 
   useEffect(() => {
     if (currentUser) {
-        localStorage.setItem('snapify_user_obj', JSON.stringify(currentUser));
+      localStorage.setItem('snapify_user_obj', JSON.stringify(currentUser));
     }
   }, [currentUser]);
 
   useEffect(() => {
-      // Only connect socket when page becomes visible (important for mobile)
-      const handleVisibilityChange = () => {
-        if (!document.hidden) {
-          const token = localStorage.getItem('snapify_token');
-          socketService.connect(token || undefined);
-        }
-      };
-
-      // Connect initially if page is visible
+    // Only connect socket when page becomes visible (important for mobile)
+    const handleVisibilityChange = () => {
       if (!document.hidden) {
         const token = localStorage.getItem('snapify_token');
         socketService.connect(token || undefined);
       }
+    };
 
-      document.addEventListener('visibilitychange', handleVisibilityChange);
+    // Connect initially if page is visible
+    if (!document.hidden) {
+      const token = localStorage.getItem('snapify_token');
+      socketService.connect(token || undefined);
+    }
 
-      let lastReloadTime = 0;
-      const handleForceReload = async () => {
-          const now = Date.now();
-          // Prevent reloads more frequent than once per 30 seconds
-          if (now - lastReloadTime < 30000) {
-              console.log('Ignoring rapid reload request');
-              return;
-          }
-          lastReloadTime = now;
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
-          if ('serviceWorker' in navigator) {
-              const registrations = await navigator.serviceWorker.getRegistrations();
-              for (const registration of registrations) {
-                  await registration.unregister();
-              }
-           }
-           if ('caches' in window) {
-               const cacheNames = await caches.keys();
-               cacheNames.forEach(cacheName => caches.delete(cacheName));
-           }
-           window.location.reload();
-       };
-       socketService.on('force_client_reload', handleForceReload);
+    let lastReloadTime = 0;
+    const handleForceReload = async () => {
+      const now = Date.now();
+      // Prevent reloads more frequent than once per 30 seconds
+      if (now - lastReloadTime < 30000) {
+        console.log('Ignoring rapid reload request');
+        return;
+      }
+      lastReloadTime = now;
 
-       // Admin status tracking
-       const handleAdminStatusUpdate = (update: {adminId: string, online: boolean, lastSeen: number}) => {
-         setAdminStatus(prev => {
-           const existing = prev.find(a => a.adminId === update.adminId);
-           if (existing) {
-             return prev.map(a => a.adminId === update.adminId ? update : a);
-           } else {
-             return [...prev, update];
-           }
-         });
-       };
+      if ('serviceWorker' in navigator) {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        for (const registration of registrations) {
+          await registration.unregister();
+        }
+      }
+      if ('caches' in window) {
+        const cacheNames = await caches.keys();
+        cacheNames.forEach(cacheName => caches.delete(cacheName));
+      }
+      window.location.reload();
+    };
+    socketService.on('force_client_reload', handleForceReload);
 
-       socketService.on('admin_status_update', handleAdminStatusUpdate);
+    // Admin status tracking
+    const handleAdminStatusUpdate = (update: { adminId: string, online: boolean, lastSeen: number }) => {
+      setAdminStatus(prev => {
+        const existing = prev.find(a => a.adminId === update.adminId);
+        if (existing) {
+          return prev.map(a => a.adminId === update.adminId ? update : a);
+        } else {
+          return [...prev, update];
+        }
+      });
+    };
 
-       // CACHE INVALIDATION: Listen for cache invalidation events
-       const handleCacheInvalidate = async (data: any) => {
-         console.log('Cache invalidation received:', data);
+    socketService.on('admin_status_update', handleAdminStatusUpdate);
 
-         if (data.type === 'full_reset') {
-           // Clear all caches and reload everything
-           await clearAllCaches({
-             clearLocalStorage: true,
-             clearServiceWorker: true
-           });
-           // Clear React state
-           setEvents([]);
-           setCurrentEventId(null);
-           setCurrentUser(null);
-           setAllUsers([]);
-           setGuestName('');
-           // Reload initial data
-           loadInitialData();
-         } else if (data.type === 'force_refresh') {
-           // Clear service worker caches and refresh data
-           await clearAllCaches({
-             clearServiceWorker: true
-           });
-           console.log('Admin triggered data refresh');
-           loadInitialData();
-         }
-       };
+    // CACHE INVALIDATION: Listen for cache invalidation events
+    const handleCacheInvalidate = async (data: any) => {
+      console.log('Cache invalidation received:', data);
 
-       socketService.on('cache_invalidate', handleCacheInvalidate);
+      if (data.type === 'full_reset') {
+        // Clear all caches and reload everything
+        await clearAllCaches({
+          clearLocalStorage: true,
+          clearServiceWorker: true
+        });
+        // Clear React state
+        setEvents([]);
+        setCurrentEventId(null);
+        setCurrentUser(null);
+        setAllUsers([]);
+        setGuestName('');
+        // Reload initial data
+        loadInitialData();
+      } else if (data.type === 'force_refresh') {
+        // Clear service worker caches and refresh data
+        await clearAllCaches({
+          clearServiceWorker: true
+        });
+        console.log('Admin triggered data refresh');
+        loadInitialData();
+      }
+    };
 
-       // Load initial admin status
-       const loadAdminStatus = async () => {
-         try {
-           const response = await fetch(`${API_URL}/api/admin/status`);
-           const data = await response.json();
-           setAdminStatus(data.admins || []);
-         } catch (error) {
-           console.warn('Failed to load admin status:', error);
-         }
-       };
+    socketService.on('cache_invalidate', handleCacheInvalidate);
 
-       loadAdminStatus();
+    // Load initial admin status
+    const loadAdminStatus = async () => {
+      try {
+        const token = localStorage.getItem('snapify_token');
+        const headers: HeadersInit = {};
+        if (token) {
+          headers.Authorization = `Bearer ${token}`;
+        }
+        const response = await fetch(`${API_URL}/api/admin/status`, { headers });
+        if (response.status === 401) {
+          setAdminStatus([]);
+          return;
+        }
+        const data = await response.json();
+        setAdminStatus(data.admins || []);
+      } catch (error) {
+        console.warn('Failed to load admin status:', error);
+        setAdminStatus([]);
+      }
+    };
 
-       return () => {
-         document.removeEventListener('visibilitychange', handleVisibilityChange);
-         socketService.off('force_client_reload', handleForceReload);
-         socketService.off('admin_status_update', handleAdminStatusUpdate);
-         socketService.off('cache_invalidate', handleCacheInvalidate);
-       };
-   }, []);
+    loadAdminStatus();
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      socketService.off('force_client_reload', handleForceReload);
+      socketService.off('admin_status_update', handleAdminStatusUpdate);
+      socketService.off('cache_invalidate', handleCacheInvalidate);
+    };
+  }, []);
 
   useEffect(() => {
     if (currentUser?.id) {
-        const handleUserUpdate = (updatedUser: User) => {
-            if (updatedUser.id === currentUser.id) {
-                setCurrentUser(prev => {
-                    if (!prev) return null;
-                    return { ...prev, ...updatedUser };
-                });
-            }
-            setAllUsers(prev => prev.map(u => u.id === updatedUser.id ? { ...u, ...updatedUser } : u));
-        };
-        socketService.on('user_updated', handleUserUpdate);
-        return () => { socketService.off('user_updated', handleUserUpdate); };
+      const handleUserUpdate = (updatedUser: User) => {
+        if (updatedUser.id === currentUser.id) {
+          setCurrentUser(prev => {
+            if (!prev) return null;
+            return { ...prev, ...updatedUser };
+          });
+        }
+        setAllUsers(prev => prev.map(u => u.id === updatedUser.id ? { ...u, ...updatedUser } : u));
+      };
+      socketService.on('user_updated', handleUserUpdate);
+      return () => { socketService.off('user_updated', handleUserUpdate); };
     }
   }, [currentUser?.id]);
 
   const loadInitialData = async () => {
-      try {
-          const token = localStorage.getItem('snapify_token');
-          const storedUserId = localStorage.getItem('snapify_user_id');
-          let currentUserFromStorage: User | null = null;
-          let hasValidAuth = false;
+    try {
+      const token = localStorage.getItem('snapify_token');
+      const storedUserId = localStorage.getItem('snapify_user_id');
+      let currentUserFromStorage: User | null = null;
+      let hasValidAuth = false;
 
-          if (token && storedUserId) {
-              try {
-                  const savedUserStr = localStorage.getItem('snapify_user_obj');
-                  if (savedUserStr) {
-                      currentUserFromStorage = JSON.parse(savedUserStr);
-                      setCurrentUser(currentUserFromStorage);
-                      hasValidAuth = true;
-                  }
-
-                  // Only fetch data if we have valid auth
-                  if (hasValidAuth) {
-                      const eventsData = await api.fetchEvents();
-                      setEvents(eventsData);
-
-                      if (currentUserFromStorage?.role === UserRole.ADMIN) {
-                          const usersData = await api.fetchUsers();
-                          setAllUsers(usersData);
-                      }
-                  }
-              } catch (e) {
-                  console.warn('Auth validation failed, logging out:', e);
-                  handleLogout();
-                  currentUserFromStorage = null;
-                  hasValidAuth = false;
-              }
+      if (token && storedUserId) {
+        try {
+          const savedUserStr = localStorage.getItem('snapify_user_obj');
+          if (savedUserStr) {
+            currentUserFromStorage = JSON.parse(savedUserStr);
+            setCurrentUser(currentUserFromStorage);
+            hasValidAuth = true;
           }
 
-          const params = new URLSearchParams(window.location.search);
-          const sharedEventId = params.get('event');
-          if (sharedEventId) {
-               try {
-                   const sharedEvent = await api.fetchEventById(sharedEventId);
-                   if (sharedEvent) {
-                       setEvents(prev => {
-                           if (!prev.find(e => e.id === sharedEventId)) return [...prev, sharedEvent];
-                           return prev;
-                       });
-                       setCurrentEventId(sharedEventId);
-                       setView('event');
-                       incrementEventViews(sharedEventId, [sharedEvent]);
-                       return; // Exit early, view is set
-                   }
-               } catch (error) {
-                   console.warn('Failed to load shared event:', error);
-                   // Fall through to normal view logic
-               }
-          }
+          // Only fetch data if we have valid auth
+          if (hasValidAuth) {
+            const eventsData = await api.fetchEvents();
+            setEvents(eventsData);
 
-          // Set appropriate view based on auth status
-          if (hasValidAuth && currentUserFromStorage) {
-              setView(currentUserFromStorage.role === UserRole.ADMIN ? 'admin' : 'dashboard');
-          } else {
-              setView('landing');
+            if (currentUserFromStorage?.role === UserRole.ADMIN) {
+              const usersData = await api.fetchUsers();
+              setAllUsers(usersData);
+            }
           }
-      } catch (err) {
-          console.error('Error in loadInitialData:', err);
-          // On error, default to landing but don't logout unnecessarily
-          setView('landing');
+        } catch (e) {
+          console.warn('Auth validation failed, logging out:', e);
+          handleLogout();
+          currentUserFromStorage = null;
+          hasValidAuth = false;
+        }
       }
+
+      const params = new URLSearchParams(window.location.search);
+      const sharedEventId = params.get('event');
+      if (sharedEventId) {
+        try {
+          const sharedEvent = await api.fetchEventById(sharedEventId);
+          if (sharedEvent) {
+            setEvents(prev => {
+              if (!prev.find(e => e.id === sharedEventId)) return [...prev, sharedEvent];
+              return prev;
+            });
+            setCurrentEventId(sharedEventId);
+            setView('event');
+            incrementEventViews(sharedEventId, [sharedEvent]);
+            return; // Exit early, view is set
+          }
+        } catch (error) {
+          console.warn('Failed to load shared event:', error);
+          // Fall through to normal view logic
+        }
+      }
+
+      // Set appropriate view based on auth status
+      if (hasValidAuth && currentUserFromStorage) {
+        setView(currentUserFromStorage.role === UserRole.ADMIN ? 'admin' : 'dashboard');
+      } else {
+        setView('landing');
+      }
+    } catch (err) {
+      console.error('Error in loadInitialData:', err);
+      // On error, default to landing but don't logout unnecessarily
+      setView('landing');
+    }
   };
 
   useEffect(() => {
     loadInitialData();
     const initGoogle = () => {
-        if (window.google && env.VITE_GOOGLE_CLIENT_ID && !window.googleSignInInitialized) {
-            try {
-                window.google.accounts.id.initialize({
-                    client_id: env.VITE_GOOGLE_CLIENT_ID,
-                    callback: handleGoogleResponse
-                });
-                window.googleSignInInitialized = true;
-            } catch (e) {
-                console.warn('Google Sign-In initialization failed:', e);
-            }
+      if (window.google && env.VITE_GOOGLE_CLIENT_ID && !window.googleSignInInitialized) {
+        try {
+          window.google.accounts.id.initialize({
+            client_id: env.VITE_GOOGLE_CLIENT_ID,
+            callback: handleGoogleResponse
+          });
+          window.googleSignInInitialized = true;
+        } catch (e) {
+          console.warn('Google Sign-In initialization failed:', e);
         }
+      }
     };
     if (window.google) initGoogle();
     else {
-        const interval = setInterval(() => {
-            if (window.google) {
-                initGoogle();
-                clearInterval(interval);
-            }
-        }, 500); // Increased interval to reduce polling frequency
-        setTimeout(() => clearInterval(interval), 15000); // Increased timeout
+      const interval = setInterval(() => {
+        if (window.google) {
+          initGoogle();
+          clearInterval(interval);
+        }
+      }, 500); // Increased interval to reduce polling frequency
+      setTimeout(() => clearInterval(interval), 15000); // Increased timeout
     }
   }, []);
 
   const handleGoogleResponse = async (response: any) => {
+    try {
+      const credential = response.credential;
       try {
-          const credential = response.credential;
-          try {
-              const res = await api.googleLogin(credential);
-              finalizeLogin(res.user, res.token);
-          } catch (e) { setAuthError("Authentication failed"); }
-      } catch (error) { setAuthError(TRANSLATIONS[language]['authErrorInvalid']); }
+        const res = await api.googleLogin(credential);
+        finalizeLogin(res.user, res.token);
+      } catch (e) { setAuthError("Authentication failed"); }
+    } catch (error) { setAuthError(TRANSLATIONS[language]['authErrorInvalid']); }
   };
 
   const finalizeLogin = async (user: User, token: string) => {
-      setCurrentUser(user);
-      localStorage.setItem('snapify_token', token);
-      localStorage.setItem('snapify_user_id', user.id);
-      localStorage.setItem('snapify_user_obj', JSON.stringify(user));
+    setCurrentUser(user);
+    localStorage.setItem('snapify_token', token);
+    localStorage.setItem('snapify_user_id', user.id);
+    localStorage.setItem('snapify_user_obj', JSON.stringify(user));
 
-      try {
-          const eventsData = await api.fetchEvents();
-          setEvents(eventsData);
-          const params = new URLSearchParams(window.location.search);
-          const urlEventId = params.get('event');
-          if (urlEventId) {
-              const targetEvent = eventsData.find(e => e.id === urlEventId);
-              if (targetEvent) {
-                 setCurrentEventId(urlEventId);
-                 setView('event');
-              } else {
-                 try {
-                     const sharedEvent = await api.fetchEventById(urlEventId);
-                     setEvents(prev => [...prev, sharedEvent]);
-                     setCurrentEventId(urlEventId);
-                     setView('event');
-                 } catch(err) { setView('dashboard'); }
-              }
-          } else if (user.role === UserRole.ADMIN) {
-              api.fetchUsers().then(setAllUsers);
-              setView('admin');
-          } else {
-              setView('dashboard');
-          }
-      } catch (error) { setView('dashboard'); }
+    try {
+      const eventsData = await api.fetchEvents();
+      setEvents(eventsData);
+      const params = new URLSearchParams(window.location.search);
+      const urlEventId = params.get('event');
+      if (urlEventId) {
+        const targetEvent = eventsData.find(e => e.id === urlEventId);
+        if (targetEvent) {
+          setCurrentEventId(urlEventId);
+          setView('event');
+        } else {
+          try {
+            const sharedEvent = await api.fetchEventById(urlEventId);
+            setEvents(prev => [...prev, sharedEvent]);
+            setCurrentEventId(urlEventId);
+            setView('event');
+          } catch (err) { setView('dashboard'); }
+        }
+      } else if (user.role === UserRole.ADMIN) {
+        api.fetchUsers().then(setAllUsers);
+        setView('admin');
+      } else {
+        setView('dashboard');
+      }
+    } catch (error) { setView('dashboard'); }
   };
 
   // FIX: Atomic view increment
   const incrementEventViews = async (id: string, currentEvents: Event[]) => {
-      // Optimistic UI update
-      const updated = currentEvents.map(e => {
-          if (e.id === id) return { ...e, views: (e.views || 0) + 1 };
-          return e;
-      });
-      setEvents(updated);
-      // Call server endpoint
-      await fetch(`${API_URL}/api/events/${id}/view`, { method: 'POST' });
+    // Optimistic UI update
+    const updated = currentEvents.map(e => {
+      if (e.id === id) return { ...e, views: (e.views || 0) + 1 };
+      return e;
+    });
+    setEvents(updated);
+    // Call server endpoint
+    await fetch(`${API_URL}/api/events/${id}/view`, { method: 'POST' });
   };
 
   useEffect(() => { localStorage.setItem('snapify_lang', language); }, [language]);
@@ -383,31 +396,31 @@ export default function App() {
     setAuthError('');
     setIsLoggingIn(true);
     try {
-        const { email, password, name, isPhotographer, studioName } = data;
-        if (!email || !password) return setAuthError(t('authErrorRequired'));
-        if (!validateEmail(email)) return setAuthError(t('authErrorInvalidEmail'));
-        if (!validatePassword(password)) return setAuthError(t('authErrorPasswordLength'));
-        if (isSignUp) {
-            if (!name || !validateGuestName(name)) return setAuthError(t('authErrorNameRequired'));
-            const sanitizedName = sanitizeInput(name);
-            const sanitizedStudioName = isPhotographer && studioName ? sanitizeInput(studioName) : undefined;
-            const newUser: User = {
-                id: `user-${Date.now()}`,
-                name: sanitizedName,
-                email: email.toLowerCase().trim(),
-                role: UserRole.USER,
-                tier: TierLevel.FREE,
-                storageUsedMb: 0,
-                storageLimitMb: 100,
-                joinedDate: new Date().toISOString().split('T')[0],
-                studioName: sanitizedStudioName
-            };
-            const res = await api.createUser(newUser);
-            await finalizeLogin(res.user, res.token);
-        } else {
-            const res = await api.login(email.toLowerCase().trim(), password);
-            await finalizeLogin(res.user, res.token);
-        }
+      const { email, password, name, isPhotographer, studioName } = data;
+      if (!email || !password) return setAuthError(t('authErrorRequired'));
+      if (!validateEmail(email)) return setAuthError(t('authErrorInvalidEmail'));
+      if (!validatePassword(password)) return setAuthError(t('authErrorPasswordLength'));
+      if (isSignUp) {
+        if (!name || !validateGuestName(name)) return setAuthError(t('authErrorNameRequired'));
+        const sanitizedName = sanitizeInput(name);
+        const sanitizedStudioName = isPhotographer && studioName ? sanitizeInput(studioName) : undefined;
+        const newUser: User = {
+          id: `user-${Date.now()}`,
+          name: sanitizedName,
+          email: email.toLowerCase().trim(),
+          role: UserRole.USER,
+          tier: TierLevel.FREE,
+          storageUsedMb: 0,
+          storageLimitMb: 100,
+          joinedDate: new Date().toISOString().split('T')[0],
+          studioName: sanitizedStudioName
+        };
+        const res = await api.createUser(newUser);
+        await finalizeLogin(res.user, res.token);
+      } else {
+        const res = await api.login(email.toLowerCase().trim(), password);
+        await finalizeLogin(res.user, res.token);
+      }
     } catch (e) { setAuthError(t('authErrorInvalid')); } finally { setIsLoggingIn(false); }
   };
 
@@ -427,8 +440,8 @@ export default function App() {
   };
 
   const handleSignInRequest = () => {
-      setShowGuestLogin(false);
-      setView('landing');
+    setShowGuestLogin(false);
+    setView('landing');
   };
 
   const handleCreateEvent = async (data: any) => {
@@ -449,23 +462,23 @@ export default function App() {
     const now = new Date().getTime();
 
     if (currentUser.role === UserRole.ADMIN && adminOptions) {
-        const { expiryType, durationValue, durationUnit } = adminOptions;
-        if (expiryType === 'unlimited') expiresAt = null;
-        else if (expiryType === 'custom') {
-            let multiplier = 1000;
-            if (durationUnit === 'minutes') multiplier = 60 * 1000;
-            if (durationUnit === 'hours') multiplier = 60 * 60 * 1000;
-            if (durationUnit === 'days') multiplier = 24 * 60 * 60 * 1000;
-            expiresAt = new Date(now + (durationValue * multiplier)).toISOString();
-        } else {
-             const days = parseInt(expiryType.replace('d', ''));
-             expiresAt = new Date(now + (days || 30) * 24 * 60 * 60 * 1000).toISOString();
-        }
+      const { expiryType, durationValue, durationUnit } = adminOptions;
+      if (expiryType === 'unlimited') expiresAt = null;
+      else if (expiryType === 'custom') {
+        let multiplier = 1000;
+        if (durationUnit === 'minutes') multiplier = 60 * 1000;
+        if (durationUnit === 'hours') multiplier = 60 * 60 * 1000;
+        if (durationUnit === 'days') multiplier = 24 * 60 * 60 * 1000;
+        expiresAt = new Date(now + (durationValue * multiplier)).toISOString();
+      } else {
+        const days = parseInt(expiryType.replace('d', ''));
+        expiresAt = new Date(now + (days || 30) * 24 * 60 * 60 * 1000).toISOString();
+      }
     } else {
-        const config = getTierConfigForUser(currentUser);
-        if (config.maxDurationDays === null) expiresAt = null;
-        else if (currentUser.tier === TierLevel.FREE && config.maxDurationHours) expiresAt = new Date(now + config.maxDurationHours * 60 * 60 * 1000).toISOString();
-        else expiresAt = new Date(now + (config.maxDurationDays || 30) * 24 * 60 * 60 * 1000).toISOString();
+      const config = getTierConfigForUser(currentUser);
+      if (config.maxDurationDays === null) expiresAt = null;
+      else if (currentUser.tier === TierLevel.FREE && config.maxDurationHours) expiresAt = new Date(now + config.maxDurationHours * 60 * 60 * 1000).toISOString();
+      else expiresAt = new Date(now + (config.maxDurationDays || 30) * 24 * 60 * 60 * 1000).toISOString();
     }
 
     const newEvent: Event = {
@@ -483,62 +496,62 @@ export default function App() {
     };
 
     try {
-        const created = await api.createEvent(newEvent);
-        setEvents(prev => [created, ...prev]);
-        setShowCreateModal(false);
-        setCurrentEventId(created.id);
-        setView('event');
+      const created = await api.createEvent(newEvent);
+      setEvents(prev => [created, ...prev]);
+      setShowCreateModal(false);
+      setCurrentEventId(created.id);
+      setView('event');
     } catch (e) { alert("Failed to create event"); }
   };
 
   const handleUpdateEvent = async (updatedEvent: Event) => {
-      await api.updateEvent(updatedEvent);
-      setEvents(prev => prev.map(e => e.id === updatedEvent.id ? updatedEvent : e));
+    await api.updateEvent(updatedEvent);
+    setEvents(prev => prev.map(e => e.id === updatedEvent.id ? updatedEvent : e));
   };
 
   const handleSetCoverImage = async (item: MediaItem) => {
     if (!currentEventId || !activeEvent) return;
-      const updated = { ...activeEvent, coverImage: item.url, coverMediaType: item.type };
-      await api.updateEvent(updated);
-      setEvents(prev => prev.map(e => e.id === currentEventId ? updated : e));
-      alert(t('coverSet'));
+    const updated = { ...activeEvent, coverImage: item.url, coverMediaType: item.type };
+    await api.updateEvent(updated);
+    setEvents(prev => prev.map(e => e.id === currentEventId ? updated : e));
+    alert(t('coverSet'));
   };
 
   const handleLikeMedia = async (item: MediaItem) => {
-      if (!currentEventId) return;
-      setEvents(prev => prev.map(e => {
-          if (e.id === currentEventId) {
-              return { ...e, media: e.media.map(m => m.id === item.id ? { ...m, likes: (m.likes || 0) + 1 } : m) };
-          }
-          return e;
-      }));
-      await api.likeMedia(item.id);
+    if (!currentEventId) return;
+    setEvents(prev => prev.map(e => {
+      if (e.id === currentEventId) {
+        return { ...e, media: e.media.map(m => m.id === item.id ? { ...m, likes: (m.likes || 0) + 1 } : m) };
+      }
+      return e;
+    }));
+    await api.likeMedia(item.id);
   };
 
   const handleDeleteEvent = async (id: string) => {
-      await api.deleteEvent(id);
-      setEvents(prev => prev.filter(e => e.id !== id));
-      if (currentEventId === id) setCurrentEventId(null);
+    await api.deleteEvent(id);
+    setEvents(prev => prev.filter(e => e.id !== id));
+    if (currentEventId === id) setCurrentEventId(null);
   };
 
   const handleUpdateUser = async (updatedUser: User) => {
-      const limit = TIER_CONFIG[updatedUser.tier].storageLimitMb;
-      const userWithLimit = { ...updatedUser, storageLimitMb: limit };
-      await api.updateUser(userWithLimit);
-      setAllUsers(prev => prev.map(u => u.id === updatedUser.id ? userWithLimit : u));
-      if (currentUser && currentUser.id === updatedUser.id) {
-          setCurrentUser(userWithLimit);
-          localStorage.setItem('snapify_user_obj', JSON.stringify(userWithLimit));
-      }
+    const limit = TIER_CONFIG[updatedUser.tier].storageLimitMb;
+    const userWithLimit = { ...updatedUser, storageLimitMb: limit };
+    await api.updateUser(userWithLimit);
+    setAllUsers(prev => prev.map(u => u.id === updatedUser.id ? userWithLimit : u));
+    if (currentUser && currentUser.id === updatedUser.id) {
+      setCurrentUser(userWithLimit);
+      localStorage.setItem('snapify_user_obj', JSON.stringify(userWithLimit));
+    }
   };
 
   const handleDeleteMedia = async (eventId: string, mediaId: string) => {
-      await api.deleteMedia(mediaId);
-      setEvents(prev => prev.map(event =>
-          event.id === eventId
-              ? { ...event, media: event.media.filter(media => media.id !== mediaId) }
-              : event
-      ));
+    await api.deleteMedia(mediaId);
+    setEvents(prev => prev.map(event =>
+      event.id === eventId
+        ? { ...event, media: event.media.filter(media => media.id !== mediaId) }
+        : event
+    ));
   };
 
   const handleUpdateStudioSettings = async (updates: Partial<User>) => {
@@ -569,263 +582,292 @@ export default function App() {
     setPreviewMedia({ type, src: url, file });
   };
 
-  const confirmUpload = async (userCaption: string, userPrivacy: 'public' | 'private') => {
+  const confirmUpload = async (userCaption: string, userPrivacy: 'public' | 'private', rotation: number = 0) => {
     if (!activeEvent || !previewMedia) return;
     setIsUploading(true);
     setUploadProgress(0);
 
     try {
-        const { type, src, file } = previewMedia;
-        const uploader = currentUser ? (TIER_CONFIG[currentUser.tier].allowBranding && currentUser.studioName ? currentUser.studioName : currentUser.name) : guestName || "Guest";
+      const { type, src, file } = previewMedia;
+      const uploader = currentUser ? (TIER_CONFIG[currentUser.tier].allowBranding && currentUser.studioName ? currentUser.studioName : currentUser.name) : guestName || "Guest";
 
-        if (type === 'video') {
-             let config;
-             if (currentUser && activeEvent.hostId === currentUser.id) {
-                 config = getTierConfigForUser(currentUser);
-             } else if (activeEvent.hostTier) {
-                 config = getTierConfig(activeEvent.hostTier);
-             } else {
-                 config = TIER_CONFIG[TierLevel.FREE];
-             }
-             if (!config.allowVideo) {
-                alert(t('videoRestricted'));
-                setIsUploading(false);
-                return;
-            }
-        }
-
-        // NOTE: Client-side check only for UX. Real quota check is on server.
-        const fileSizeMb = file ? file.size / (1024 * 1024) : 0;
-        if (currentUser && currentUser.storageLimitMb !== -1 && (currentUser.storageUsedMb + fileSizeMb > currentUser.storageLimitMb)) {
-             // Warning only, server will enforce
-        }
-
-        let finalCaption = userCaption;
-        if (!finalCaption && type === 'image') {
-             finalCaption = await api.generateImageCaption(src);
-        }
-        const config = currentUser ? getTierConfigForUser(currentUser) : TIER_CONFIG[TierLevel.FREE];
-        const canWatermark = currentUser?.role === UserRole.PHOTOGRAPHER && config.allowWatermark;
-        const canUseBranding = currentUser ? TIER_CONFIG[currentUser.tier].allowBranding : false;
-        const shouldWatermark = applyWatermarkState && canWatermark;
-        let uploadFile = file;
-
-        if ((shouldWatermark && type === 'image' && currentUser) || (!file && type === 'image')) {
-             let source = src;
-             if (shouldWatermark && currentUser) {
-               source = await applyWatermark(
-                 src,
-                 canUseBranding ? (currentUser.studioName || null) : null,
-                 canUseBranding ? (currentUser.logoUrl || null) : null,
-                 canUseBranding ? currentUser.watermarkOpacity : undefined,
-                 canUseBranding ? currentUser.watermarkSize : undefined,
-                 canUseBranding ? currentUser.watermarkPosition : undefined,
-                 canUseBranding ? currentUser.watermarkOffsetX : undefined,
-                 canUseBranding ? currentUser.watermarkOffsetY : undefined
-               );
-             }
-             const res = await fetch(source);
-             const blob = await res.blob();
-             uploadFile = new File([blob], "capture.jpg", { type: "image/jpeg" });
-        }
-
-        const metadata: Partial<MediaItem> = {
-            id: `media-${Date.now()}`,
-            type,
-            caption: finalCaption,
-            uploadedAt: new Date().toISOString(),
-            uploaderName: uploader,
-            uploaderId: currentUser ? currentUser.id : `guest-${guestName}-${Date.now()}`,
-            isWatermarked: shouldWatermark,
-            watermarkText: shouldWatermark && canUseBranding ? currentUser?.studioName : undefined,
-            privacy: userPrivacy
-        };
-
-        if (uploadFile) {
-            await api.uploadMedia(uploadFile, metadata, activeEvent.id, (percent) => {
-                setUploadProgress(percent);
-            });
-        }
-
-        setPreviewMedia(null);
-        if (fileInputRef.current) fileInputRef.current.value = '';
-        if (cameraInputRef.current) cameraInputRef.current.value = '';
-    } catch (e: any) {
-        console.error("Upload failed", e);
-        // Handle Storage Limit Error specifically
-        if (e.message === 'Storage limit exceeded' || (e.response && e.response.status === 413)) {
-            alert(t('storageLimit'));
+      if (type === 'video') {
+        let config;
+        if (currentUser && activeEvent.hostId === currentUser.id) {
+          config = getTierConfigForUser(currentUser);
+        } else if (activeEvent.hostTier) {
+          config = getTierConfig(activeEvent.hostTier);
         } else {
-            alert("Upload failed. Please try again.");
+          config = TIER_CONFIG[TierLevel.FREE];
         }
+        if (!config.allowVideo) {
+          alert(t('videoRestricted'));
+          setIsUploading(false);
+          return;
+        }
+      }
+
+      // NOTE: Client-side check only for UX. Real quota check is on server.
+      const fileSizeMb = file ? file.size / (1024 * 1024) : 0;
+      if (currentUser && currentUser.storageLimitMb !== -1 && (currentUser.storageUsedMb + fileSizeMb > currentUser.storageLimitMb)) {
+        // Warning only, server will enforce
+      }
+
+      let finalCaption = userCaption;
+      if (!finalCaption && type === 'image') {
+        finalCaption = await api.generateImageCaption(src);
+      }
+      const config = currentUser ? getTierConfigForUser(currentUser) : TIER_CONFIG[TierLevel.FREE];
+      const canWatermark = currentUser?.role === UserRole.PHOTOGRAPHER && config.allowWatermark;
+      const canUseBranding = currentUser ? TIER_CONFIG[currentUser.tier].allowBranding : false;
+      const shouldWatermark = applyWatermarkState && canWatermark;
+      let uploadFile = file;
+
+      if ((shouldWatermark && type === 'image' && currentUser) || (!file && type === 'image')) {
+        let source = src;
+        if (shouldWatermark && currentUser) {
+          source = await applyWatermark(
+            src,
+            canUseBranding ? (currentUser.studioName || null) : null,
+            canUseBranding ? (currentUser.logoUrl || null) : null,
+            canUseBranding ? currentUser.watermarkOpacity : undefined,
+            canUseBranding ? currentUser.watermarkSize : undefined,
+            canUseBranding ? currentUser.watermarkPosition : undefined,
+            canUseBranding ? currentUser.watermarkOffsetX : undefined,
+            canUseBranding ? currentUser.watermarkOffsetY : undefined
+          );
+        }
+        const res = await fetch(source);
+        const blob = await res.blob();
+        uploadFile = new File([blob], "capture.jpg", { type: "image/jpeg" });
+      }
+
+      // Apply rotation if needed
+      if (rotation !== 0 && type === 'image' && uploadFile) {
+        const img = new Image();
+        img.src = URL.createObjectURL(uploadFile);
+        await new Promise(resolve => { img.onload = resolve; });
+
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          // Set canvas size based on rotation
+          if (Math.abs(rotation) === 90) {
+            canvas.width = img.height;
+            canvas.height = img.width;
+          } else {
+            canvas.width = img.width;
+            canvas.height = img.height;
+          }
+
+          ctx.save();
+          ctx.translate(canvas.width / 2, canvas.height / 2);
+          ctx.rotate((rotation * Math.PI) / 180);
+          ctx.drawImage(img, -img.width / 2, -img.height / 2);
+          ctx.restore();
+
+          const rotatedBlob = await new Promise<Blob>(resolve => {
+            canvas.toBlob(resolve, 'image/jpeg', 0.85);
+          });
+          uploadFile = new File([rotatedBlob], "rotated.jpg", { type: "image/jpeg" });
+        }
+      }
+
+      const metadata: Partial<MediaItem> = {
+        id: `media-${Date.now()}`,
+        type,
+        caption: finalCaption,
+        uploadedAt: new Date().toISOString(),
+        uploaderName: uploader,
+        uploaderId: currentUser ? currentUser.id : `guest-${guestName}-${Date.now()}`,
+        isWatermarked: shouldWatermark,
+        watermarkText: shouldWatermark && canUseBranding ? currentUser?.studioName : undefined,
+        privacy: userPrivacy
+      };
+
+      if (uploadFile) {
+        console.log('Starting upload:', {
+          source: file ? 'photo_library' : 'camera_capture',
+          fileSize: uploadFile.size,
+          fileType: uploadFile.type,
+          fileName: uploadFile.name,
+          metadata
+        });
+        await api.uploadMedia(uploadFile, metadata, activeEvent.id, (percent) => {
+          setUploadProgress(percent);
+        });
+      }
+
+      setPreviewMedia(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      if (cameraInputRef.current) cameraInputRef.current.value = '';
+    } catch (e: any) {
+      console.error("Upload failed", e);
+      // Handle Storage Limit Error specifically
+      if (e.message === 'Storage limit exceeded' || (e.response && e.response.status === 413)) {
+        alert(t('storageLimit'));
+      } else {
+        alert("Upload failed. Please try again.");
+      }
     } finally {
-        setIsUploading(false);
-        setUploadProgress(0);
+      setIsUploading(false);
+      setUploadProgress(0);
     }
   };
 
   const downloadEventZip = async (targetEvent: Event) => {
-      if (!targetEvent || targetEvent.media.length === 0) return;
-      setDownloadingZip(true);
-      try {
-          const zip = new JSZip();
-          const folder = zip.folder(targetEvent.title.replace(/[^a-z0-9]/gi, '_'));
-          const eventHost = allUsers.find(u => u.id === targetEvent.hostId);
-          const isFreeTier = !eventHost || eventHost.tier === TierLevel.FREE;
-          const fetchFile = async (url: string) => {
-               const fetchUrl = url.startsWith('http') || url.startsWith('data:') ? url : `${(env.VITE_API_URL || '')}${url}`;
-               const res = await fetch(fetchUrl);
-               return res.blob();
-          };
-          const blobToBase64 = (blob: Blob): Promise<string> => new Promise(resolve => {
-              const reader = new FileReader();
-              reader.onloadend = () => resolve(reader.result as string);
-              reader.readAsDataURL(blob);
-          });
-          for (const item of targetEvent.media) {
-              const filename = `${item.id}.${item.type === 'video' ? 'mp4' : 'jpg'}`;
-              if (!item.url) continue;
-              let blob = await fetchFile(item.url);
-              if (isFreeTier && item.type === 'image') {
-                  try {
-                      const base64 = await blobToBase64(blob);
-                      const watermarkedDataUrl = await applyWatermark(base64, "SnapifY", null, 0.5, 30, 'center', 0, 0);
-                      const cleanData = watermarkedDataUrl.split(',')[1];
-                      if (folder) folder.file(filename, cleanData, { base64: true });
-                      continue;
-                  } catch (e) { console.warn("Failed to watermark image for zip", e); }
-              }
-              if (folder) folder.file(filename, blob);
-          }
-          const content = await zip.generateAsync({ type: "blob" });
-          const link = document.createElement('a');
-          link.href = URL.createObjectURL(content);
-          link.download = `${targetEvent.title.replace(/[^a-z0-9]/gi, '_')}_memories.zip`;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          await api.updateEvent({ ...targetEvent, downloads: (targetEvent.downloads || 0) + 1 });
-          setEvents(prev => prev.map(e => e.id === targetEvent.id ? { ...e, downloads: (e.downloads || 0) + 1 } : e));
-      } catch (err) {
-          alert(t('zipError'));
-      } finally {
-          setDownloadingZip(false);
+    if (!targetEvent || targetEvent.media.length === 0) return;
+    setDownloadingZip(true);
+    try {
+      const zip = new JSZip();
+      const folder = zip.folder(targetEvent.title.replace(/[^a-z0-9]/gi, '_'));
+      const eventHost = allUsers.find(u => u.id === targetEvent.hostId);
+      const isFreeTier = !eventHost || eventHost.tier === TierLevel.FREE;
+      const fetchFile = async (url: string) => {
+        const fetchUrl = url.startsWith('http') || url.startsWith('data:') ? url : `${(env.VITE_API_URL || '')}${url}`;
+        const res = await fetch(fetchUrl);
+        return res.blob();
+      };
+      const blobToBase64 = (blob: Blob): Promise<string> => new Promise(resolve => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.readAsDataURL(blob);
+      });
+      for (const item of targetEvent.media) {
+        const filename = `${item.id}.${item.type === 'video' ? 'mp4' : 'jpg'}`;
+        if (!item.url) continue;
+        let blob = await fetchFile(item.url);
+        if (isFreeTier && item.type === 'image') {
+          try {
+            const base64 = await blobToBase64(blob);
+            const watermarkedDataUrl = await applyWatermark(base64, "SnapifY", null, 0.5, 30, 'center', 0, 0);
+            const cleanData = watermarkedDataUrl.split(',')[1];
+            if (folder) folder.file(filename, cleanData, { base64: true });
+            continue;
+          } catch (e) { console.warn("Failed to watermark image for zip", e); }
+        }
+        if (folder) folder.file(filename, blob);
       }
+      const content = await zip.generateAsync({ type: "blob" });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(content);
+      link.download = `${targetEvent.title.replace(/[^a-z0-9]/gi, '_')}_memories.zip`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      await api.updateEvent({ ...targetEvent, downloads: (targetEvent.downloads || 0) + 1 });
+      setEvents(prev => prev.map(e => e.id === targetEvent.id ? { ...e, downloads: (e.downloads || 0) + 1 } : e));
+    } catch (err) {
+      alert(t('zipError'));
+    } finally {
+      setDownloadingZip(false);
+    }
   };
 
   const handleLogout = async () => {
-      // Call logout API if user is logged in
-      if (currentUser) {
-          try {
-              await fetch(`${API_URL}/api/auth/logout`, {
-                  method: 'POST',
-                  headers: {
-                      'Authorization': `Bearer ${localStorage.getItem('snapify_token')}`,
-                      'Content-Type': 'application/json'
-                  }
-              });
-          } catch (error) {
-              console.warn('Logout API call failed:', error);
+    // Call logout API if user is logged in
+    if (currentUser) {
+      try {
+        await fetch(`${API_URL}/api/auth/logout`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('snapify_token')}`,
+            'Content-Type': 'application/json'
           }
+        });
+      } catch (error) {
+        console.warn('Logout API call failed:', error);
       }
+    }
 
-      setCurrentUser(null);
-      setGuestName('');
-      setView('landing');
-      setCurrentEventId(null);
-      localStorage.removeItem('snapify_token');
-      localStorage.removeItem('snapify_user_id');
-      localStorage.removeItem('snapify_user_obj');
-      safeRemoveItem('snapify_guest_name');
-      clearDeviceFingerprint();
-      if (typeof window !== 'undefined') {
-          const url = new URL(window.location.href);
-          url.search = "";
-          window.history.pushState({}, '', url.toString());
-          window.location.href = '/';
-      }
+    setCurrentUser(null);
+    setGuestName('');
+    setView('landing');
+    setCurrentEventId(null);
+    localStorage.removeItem('snapify_token');
+    localStorage.removeItem('snapify_user_id');
+    localStorage.removeItem('snapify_user_obj');
+    safeRemoveItem('snapify_guest_name');
+    clearDeviceFingerprint();
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.search = "";
+      window.history.pushState({}, '', url.toString());
+      window.location.href = '/';
+    }
   };
 
   const handleBack = () => {
-      if (view === 'event') {
-          setCurrentEventId(null);
-          const url = new URL(window.location.href);
-          if (url.searchParams.has('event')) {
-             url.searchParams.delete('event');
-             window.history.replaceState({}, '', url.toString());
-          }
-          setView(currentUser ? (currentUser.role === UserRole.ADMIN ? 'admin' : 'dashboard') : 'landing');
-      } else if (view === 'dashboard' || view === 'admin') {
-          handleLogout();
+    if (view === 'event') {
+      setCurrentEventId(null);
+      const url = new URL(window.location.href);
+      if (url.searchParams.has('event')) {
+        url.searchParams.delete('event');
+        window.history.replaceState({}, '', url.toString());
       }
+      setView(currentUser ? (currentUser.role === UserRole.ADMIN ? 'admin' : 'dashboard') : 'landing');
+    } else if (view === 'dashboard' || view === 'admin') {
+      handleLogout();
+    }
   };
 
   const handleIncomingShare = (text: string) => {
-      if (currentEventId) {
-          alert(`Shared to SnapifY: ${text}`);
-      } else {
-          localStorage.setItem('snapify_shared_pending', text);
-      }
+    if (currentEventId) {
+      alert(`Shared to SnapifY: ${text}`);
+    } else {
+      localStorage.setItem('snapify_shared_pending', text);
+    }
   };
+
+  // Loading component for Suspense fallback
+  const LoadingSpinner = () => (
+    <div className="flex items-center justify-center min-h-[200px]">
+      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+    </div>
+  );
 
   return (
     <div className="h-[100dvh] w-full flex flex-col bg-slate-50">
-      <OfflineBanner t={t} />
-      <ShareTargetHandler onShareReceive={handleIncomingShare} />
-      <ReloadPrompt />
+      <Suspense fallback={<LoadingSpinner />}>
+        <OfflineBanner t={t} />
+      </Suspense>
+      <Suspense fallback={null}>
+        <ShareTargetHandler onShareReceive={handleIncomingShare} />
+      </Suspense>
+      <Suspense fallback={null}>
+        <ReloadPrompt />
+      </Suspense>
 
       <div className="flex-shrink-0 z-50 w-full bg-slate-50/95 backdrop-blur-md border-b border-slate-200">
-            <Navigation
-                 currentUser={currentUser}
-                 guestName={guestName}
-                 view={view}
-                 currentEventTitle={activeEvent?.title}
-                 language={language}
-                 onChangeLanguage={changeLanguage}
-                 onLogout={handleLogout}
-                 onSignIn={handleSignInRequest}
-                 onHome={() => {
-                   setCurrentEventId(null);
-                   if (currentUser) setView(currentUser.role === UserRole.ADMIN ? 'admin' : 'dashboard');
-                   else setView('landing');
-                 }}
-                 onBack={handleBack}
-                 onToAdmin={() => setView('admin')}
-                 onOpenSettings={() => setShowStudioSettings(true)}
-                 t={t}
-              />
+        <Suspense fallback={<div className="h-16 bg-slate-50/95"></div>}>
+          <Navigation
+            currentUser={currentUser}
+            guestName={guestName}
+            view={view}
+            currentEventTitle={activeEvent?.title || ''}
+            language={language}
+            onChangeLanguage={changeLanguage}
+            onLogout={handleLogout}
+            onSignIn={handleSignInRequest}
+            onHome={() => {
+              setCurrentEventId(null);
+              if (currentUser) setView(currentUser.role === UserRole.ADMIN ? 'admin' : 'dashboard');
+              else setView('landing');
+            }}
+            onBack={handleBack}
+            onToAdmin={() => setView('admin')}
+            onOpenSettings={() => setShowStudioSettings(true)}
+            t={t}
+          />
+        </Suspense>
 
 
-              {/* Admin Status & Support Chat - Show for all logged-in users */}
-              {currentUser && (
-                <div className="absolute top-4 right-4 flex items-center gap-3 z-60">
-                  {/* Admin Status Indicator - Always show for logged-in users */}
-                  <div className="flex items-center gap-2 bg-white/90 backdrop-blur rounded-full px-3 py-1.5 shadow-sm border border-slate-200">
-                    <div className="flex items-center gap-1">
-                      <div className={`w-2 h-2 rounded-full ${adminStatus.some(a => a.online) ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                      <span className="text-xs font-medium text-slate-700">
-                        {adminStatus.some(a => a.online) ? 'Admin Online' : 'Admin Offline'}
-                      </span>
-                    </div>
-                  </div>
+      </div>
 
-                  {/* Support Chat Button */}
-                  <button
-                    onClick={() => setShowSupportChat(true)}
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-full p-2.5 shadow-lg hover:shadow-xl transition-all"
-                    title="Contact Support"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                    </svg>
-                  </button>
-                </div>
-              )}
-        </div>
-
-        <div className="flex-1 overflow-y-auto overflow-x-hidden scroll-smooth w-full relative no-scrollbar">
-          {view === 'landing' ? (
-            <div className="min-h-full w-full">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden scroll-smooth w-full relative no-scrollbar">
+        {view === 'landing' ? (
+          <div className="min-h-full w-full">
+            <Suspense fallback={<LoadingSpinner />}>
               <LandingPage
                 onGoogleLogin={() => { if (window.google) window.google.accounts.id.prompt(); }}
                 onEmailAuth={handleEmailAuth}
@@ -836,73 +878,88 @@ export default function App() {
                 onChangeLanguage={changeLanguage}
                 t={t}
               />
+            </Suspense>
+            <Suspense fallback={null}>
               <PWAInstallPrompt t={t} />
-              {showContactModal && <ContactModal onClose={() => { setShowContactModal(false); setSelectedTier(undefined); }} t={t} tier={selectedTier} />}
+            </Suspense>
+            {showContactModal && (
+              <Suspense fallback={null}>
+                <ContactModal onClose={() => { setShowContactModal(false); setSelectedTier(undefined); }} t={t} tier={selectedTier} />
+              </Suspense>
+            )}
+          </div>
+        ) : (
+          <div className="flex flex-col min-h-full">
+            <div className="flex-1 pb-32">
+              {view === 'admin' && currentUser?.role === UserRole.ADMIN && (
+                <Suspense fallback={<LoadingSpinner />}>
+                  <AdminDashboard
+                    users={allUsers}
+                    events={events}
+                    onClose={() => setView('dashboard')}
+                    onLogout={handleLogout}
+                    onDeleteUser={async (id) => { await api.deleteUser(id); setAllUsers(prev => prev.filter(u => u.id !== id)); }}
+                    onDeleteEvent={handleDeleteEvent}
+                    onDeleteMedia={handleDeleteMedia}
+                    onUpdateEvent={handleUpdateEvent}
+                    onUpdateUser={handleUpdateUser}
+                    onNewEvent={() => setShowCreateModal(true)}
+                    onDownloadEvent={downloadEventZip}
+                    t={t}
+                  />
+                </Suspense>
+              )}
+
+              {view === 'dashboard' && currentUser && (
+                <Suspense fallback={<LoadingSpinner />}>
+                  <UserDashboard
+                    events={events}
+                    currentUser={currentUser}
+                    onNewEvent={() => setShowCreateModal(true)}
+                    onSelectEvent={(id) => { setCurrentEventId(id); setView('event'); }}
+                    onRequestUpgrade={() => setShowContactModal(true)}
+                    t={t}
+                  />
+                </Suspense>
+              )}
+
+              {view === 'event' && activeEvent && (
+                <Suspense fallback={<LoadingSpinner />}>
+                  <EventGallery
+                    key={activeEvent.id}
+                    event={activeEvent}
+                    currentUser={currentUser}
+                    hostUser={hostUser}
+                    isEventExpired={isEventExpired}
+                    isOwner={Boolean(isOwner)}
+                    isHostPhotographer={Boolean(isHostPhotographer)}
+                    downloadingZip={downloadingZip}
+                    applyWatermark={applyWatermarkState}
+                    setApplyWatermark={setApplyWatermarkState}
+                    onDownloadAll={(media) => downloadEventZip({ ...activeEvent, media: media || activeEvent.media })}
+                    onSetCover={handleSetCoverImage}
+                    onUpload={initiateMediaAction}
+                    onLike={handleLikeMedia}
+                    onOpenLiveSlideshow={() => setView('live')}
+                    t={t}
+                  />
+                </Suspense>
+              )}
             </div>
-          ) : (
-             <div className="flex flex-col min-h-full">
-                 <div className="flex-1 pb-32">
-                    {view === 'admin' && currentUser?.role === UserRole.ADMIN && (
-                         <AdminDashboard
-                            users={allUsers}
-                            events={events}
-                            onClose={() => setView('dashboard')}
-                            onLogout={handleLogout}
-                            onDeleteUser={async (id) => { await api.deleteUser(id); setAllUsers(prev => prev.filter(u => u.id !== id)); }}
-                            onDeleteEvent={handleDeleteEvent}
-                            onDeleteMedia={handleDeleteMedia}
-                            onUpdateEvent={handleUpdateEvent}
-                            onUpdateUser={handleUpdateUser}
-                            onNewEvent={() => setShowCreateModal(true)}
-                            onDownloadEvent={downloadEventZip}
-                            t={t}
-                         />
-                    )}
+          </div>
+        )}
 
-                    {view === 'dashboard' && currentUser && (
-                        <UserDashboard
-                          events={events}
-                          currentUser={currentUser}
-                          onNewEvent={() => setShowCreateModal(true)}
-                          onSelectEvent={(id) => { setCurrentEventId(id); setView('event'); }}
-                          onRequestUpgrade={() => setShowContactModal(true)}
-                          t={t}
-                        />
-                    )}
-
-                    {view === 'event' && activeEvent && (
-                        <EventGallery
-                          key={activeEvent.id}
-                          event={activeEvent}
-                          currentUser={currentUser}
-                          hostUser={hostUser}
-                          isEventExpired={isEventExpired}
-                          isOwner={Boolean(isOwner)}
-                          isHostPhotographer={Boolean(isHostPhotographer)}
-                          downloadingZip={downloadingZip}
-                          applyWatermark={applyWatermarkState}
-                          setApplyWatermark={setApplyWatermarkState}
-                          onDownloadAll={(media) => downloadEventZip({ ...activeEvent, media: media || activeEvent.media })}
-                          onSetCover={handleSetCoverImage}
-                          onUpload={initiateMediaAction}
-                          onLike={handleLikeMedia}
-                          onOpenLiveSlideshow={() => setView('live')}
-                          t={t}
-                        />
-                    )}
-                 </div>
-             </div>
-          )}
-
-          {view === 'live' && activeEvent && (
-                <LiveSlideshow
-                  event={activeEvent}
-                  currentUser={currentUser}
-                  hostUser={hostUser}
-                  onClose={() => setView('event')}
-                  t={t}
-                />
-          )}
+        {view === 'live' && activeEvent && (
+          <Suspense fallback={<LoadingSpinner />}>
+            <LiveSlideshow
+              event={activeEvent}
+              currentUser={currentUser}
+              hostUser={hostUser}
+              onClose={() => setView('event')}
+              t={t}
+            />
+          </Suspense>
+        )}
       </div>
 
       <PWAInstallPrompt t={t} />
@@ -911,14 +968,15 @@ export default function App() {
       <input key="camera-input-v2" type="file" ref={cameraInputRef} className="hidden" accept="image/*" capture="environment" onChange={handleFileUpload} />
 
       {previewMedia && (
-        <MediaReviewModal
+        <Suspense fallback={null}>
+          <MediaReviewModal
             type={previewMedia.type}
             src={previewMedia.src}
             onConfirm={confirmUpload}
             onRetake={() => {
-                setPreviewMedia(null);
-                if (lastUsedInput === 'camera') cameraInputRef.current?.click();
-                else fileInputRef.current?.click();
+              setPreviewMedia(null);
+              if (lastUsedInput === 'camera') cameraInputRef.current?.click();
+              else fileInputRef.current?.click();
             }}
             onCancel={() => setPreviewMedia(null)}
             isUploading={isUploading}
@@ -926,18 +984,37 @@ export default function App() {
             isRegistered={!!currentUser}
             t={t}
             file={previewMedia.file}
-        />
+          />
+        </Suspense>
       )}
 
       <div className="fixed bottom-4 left-4 z-[9999] pointer-events-none bg-red-500 text-white text-[10px] font-bold px-2 py-1 rounded-full shadow-lg opacity-80">
         v2.1 NATIVE
       </div>
 
-      {showContactModal && <ContactModal onClose={() => { setShowContactModal(false); setSelectedTier(undefined); }} t={t} tier={selectedTier} />}
-      {showGuestLogin && <GuestLoginModal onLogin={handleGuestLogin} onRegister={handleSignInRequest} onCancel={() => setShowGuestLogin(false)} t={t} />}
-      {showCreateModal && currentUser && <CreateEventModal currentUser={currentUser} onClose={() => setShowCreateModal(false)} onCreate={handleCreateEvent} t={t} />}
-      {showStudioSettings && currentUser && <StudioSettingsModal currentUser={currentUser} onClose={() => setShowStudioSettings(false)} onSave={handleUpdateStudioSettings} t={t} />}
-      <SupportChat isOpen={showSupportChat} onClose={() => setShowSupportChat(false)} currentUser={currentUser} t={t} />
+      {showContactModal && (
+        <Suspense fallback={null}>
+          <ContactModal onClose={() => { setShowContactModal(false); setSelectedTier(undefined); }} t={t} tier={selectedTier} />
+        </Suspense>
+      )}
+      {showGuestLogin && (
+        <Suspense fallback={null}>
+          <GuestLoginModal onLogin={handleGuestLogin} onRegister={handleSignInRequest} onCancel={() => setShowGuestLogin(false)} t={t} />
+        </Suspense>
+      )}
+      {showCreateModal && currentUser && (
+        <Suspense fallback={null}>
+          <CreateEventModal currentUser={currentUser} onClose={() => setShowCreateModal(false)} onCreate={handleCreateEvent} t={t} />
+        </Suspense>
+      )}
+      {showStudioSettings && currentUser && (
+        <Suspense fallback={null}>
+          <StudioSettingsModal currentUser={currentUser} onClose={() => setShowStudioSettings(false)} onSave={handleUpdateStudioSettings} t={t} />
+        </Suspense>
+      )}
+      <Suspense fallback={null}>
+        <SupportChat isOpen={showSupportChat} onClose={() => setShowSupportChat(false)} currentUser={currentUser} t={t} />
+      </Suspense>
     </div>
   );
 }

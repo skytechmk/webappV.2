@@ -1,5 +1,5 @@
-import React from 'react';
-import { Plus, Sparkles, Zap, Clock, Calendar, Image as ImageIcon, User as UserIcon, Crown, Star, BarChart3, TrendingUp, Users, Download, Settings, Camera, Video, Palette } from 'lucide-react';
+import React, { useState } from 'react';
+import { Plus, Sparkles, Zap, Clock, Calendar, Image as ImageIcon, User as UserIcon, Crown, Star, BarChart3, TrendingUp, Users, Download, Settings, Camera, Video, Palette, MessageCircle } from 'lucide-react';
 import { Event, User, TranslateFn, TierLevel, UserRole } from '../types';
 
 interface UserDashboardProps {
@@ -11,6 +11,8 @@ interface UserDashboardProps {
   t: TranslateFn;
 }
 
+type Tab = 'events' | 'support';
+
 export const UserDashboard: React.FC<UserDashboardProps> = ({
   events,
   currentUser,
@@ -19,6 +21,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   onRequestUpgrade,
   t
 }) => {
+  const [activeTab, setActiveTab] = useState<Tab>('events');
   
   // Helper to render tier badge
   const renderTierBadge = (tier: TierLevel) => {
@@ -62,15 +65,19 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4 bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
         <div>
           <div className="flex items-center gap-3 mb-1">
-              <h2 className="text-2xl font-bold text-slate-900">{t('myEvents')}</h2>
-              {renderTierBadge(currentUser.tier)}
+              <h2 className="text-2xl font-bold text-slate-900">
+                {activeTab === 'events' ? t('myEvents') : 'Support & Help'}
+              </h2>
+              {activeTab === 'events' && renderTierBadge(currentUser.tier)}
           </div>
-          <p className="text-slate-500">{t('manageEvents')}</p>
+          <p className="text-slate-500">
+            {activeTab === 'events' ? t('manageEvents') : 'Get help and contact support'}
+          </p>
         </div>
-        
+
         <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-          {currentUser.tier === TierLevel.FREE && (
-              <button 
+          {activeTab === 'events' && currentUser.tier === TierLevel.FREE && (
+              <button
                 onClick={onRequestUpgrade}
                 className="w-full sm:w-auto bg-gradient-to-r from-amber-200 to-yellow-400 text-amber-900 px-5 py-2.5 rounded-xl font-bold flex items-center justify-center space-x-2 hover:shadow-lg hover:scale-[1.02] transition-all"
                 title="Upgrade your plan"
@@ -79,19 +86,49 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                 <span>{t('contactSales')}</span>
               </button>
           )}
-          
-          <button 
-            onClick={onNewEvent}
-            className="w-full sm:w-auto bg-black text-white px-5 py-2.5 rounded-xl font-medium flex items-center justify-center space-x-2 hover:bg-slate-800 transition-all shadow-lg hover:shadow-xl"
-          >
-            <Plus size={20} />
-            <span>{t('newEvent')}</span>
-          </button>
+
+          {activeTab === 'events' && (
+            <button
+              onClick={onNewEvent}
+              className="w-full sm:w-auto bg-black text-white px-5 py-2.5 rounded-xl font-medium flex items-center justify-center space-x-2 hover:bg-slate-800 transition-all shadow-lg hover:shadow-xl"
+            >
+              <Plus size={20} />
+              <span>{t('newEvent')}</span>
+            </button>
+          )}
         </div>
       </div>
 
+      {/* Tab Navigation */}
+      <div className="flex items-center gap-1 bg-white p-1 rounded-xl shadow-sm border border-slate-200 mb-6">
+        <button
+          onClick={() => setActiveTab('events')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-bold transition-all ${
+            activeTab === 'events'
+            ? 'bg-indigo-600 text-white shadow-sm'
+            : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'
+          }`}
+        >
+          <Calendar size={16} />
+          Events
+        </button>
+        <button
+          onClick={() => setActiveTab('support')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-bold transition-all ${
+            activeTab === 'support'
+            ? 'bg-indigo-600 text-white shadow-sm'
+            : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'
+          }`}
+        >
+          <MessageCircle size={16} />
+          Support
+        </button>
+      </div>
+
       {/* Content Section */}
-      {events.length === 0 ? (
+      {activeTab === 'events' && (
+        <>
+          {events.length === 0 ? (
         // Empty State
         <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-slate-300 shadow-sm mx-4 sm:mx-0">
           <div className="bg-indigo-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6">
@@ -111,6 +148,9 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
         <div className="grid md:grid-cols-2 gap-6">
           {events
             .filter(evt => {
+              // Defensive check for undefined/null events
+              if (!evt || !evt.title) return false;
+
               const expired = evt.expiresAt ? new Date() > new Date(evt.expiresAt) : false;
               // Hide expired events for FREE, BASIC, and PRO users
               if (expired && (currentUser.tier === TierLevel.FREE || currentUser.tier === TierLevel.BASIC || currentUser.tier === TierLevel.PRO)) {
@@ -134,7 +174,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                 
                 <div className="flex justify-between items-start mb-4 relative z-10">
                   <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-white font-bold text-xl shadow-md">
-                    {evt.title.charAt(0)}
+                    {evt.title ? evt.title.charAt(0).toUpperCase() : '?'}
                   </div>
                   <div className="flex gap-2">
                     {expired && (
@@ -281,6 +321,93 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
             >
               Upgrade to PRO - $29.99/month
             </button>
+          </div>
+        </div>
+      )}
+        </>
+      )}
+
+      {activeTab === 'support' && (
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8">
+          <div className="text-center mb-8">
+            <div className="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <MessageCircle className="text-indigo-600" size={32} />
+            </div>
+            <h3 className="text-2xl font-bold text-slate-900 mb-2">Support & Help Center</h3>
+            <p className="text-slate-500">Get help with your SnapifY account and events</p>
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-6">
+            <div className="space-y-4">
+              <h4 className="text-lg font-bold text-slate-900">Quick Help</h4>
+
+              <div className="space-y-3">
+                <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                  <h5 className="font-bold text-slate-900 mb-2">How to create an event?</h5>
+                  <p className="text-sm text-slate-600">Click the "New Event" button and fill in your event details. You can set custom expiration times and privacy settings.</p>
+                </div>
+
+                <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                  <h5 className="font-bold text-slate-900 mb-2">Storage limits</h5>
+                  <p className="text-sm text-slate-600">Free plan: 100MB, Basic: 1GB, Pro: 10GB, Studio: Unlimited. Upgrade anytime to increase your storage.</p>
+                </div>
+
+                <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                  <h5 className="font-bold text-slate-900 mb-2">Video uploads</h5>
+                  <p className="text-sm text-slate-600">Video support is available for Basic, Pro, and Studio plans. Maximum file size depends on your plan.</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <h4 className="text-lg font-bold text-slate-900">Contact Support</h4>
+
+              <div className="space-y-3">
+                <div className="p-4 bg-indigo-50 rounded-xl border border-indigo-200">
+                  <div className="flex items-center gap-3 mb-3">
+                    <MessageCircle className="text-indigo-600" size={20} />
+                    <h5 className="font-bold text-indigo-900">Live Chat Support</h5>
+                  </div>
+                  <p className="text-sm text-indigo-700 mb-3">Chat with our support team for immediate help</p>
+                  <button className="w-full bg-indigo-600 text-white py-2 px-4 rounded-lg font-bold hover:bg-indigo-700 transition-colors">
+                    Start Chat
+                  </button>
+                </div>
+
+                <div className="p-4 bg-green-50 rounded-xl border border-green-200">
+                  <div className="flex items-center gap-3 mb-3">
+                    <Users className="text-green-600" size={20} />
+                    <h5 className="font-bold text-green-900">Community Forum</h5>
+                  </div>
+                  <p className="text-sm text-green-700 mb-3">Connect with other users and share tips</p>
+                  <button className="w-full bg-green-600 text-white py-2 px-4 rounded-lg font-bold hover:bg-green-700 transition-colors">
+                    Visit Forum
+                  </button>
+                </div>
+
+                <div className="p-4 bg-amber-50 rounded-xl border border-amber-200">
+                  <div className="flex items-center gap-3 mb-3">
+                    <Crown className="text-amber-600" size={20} />
+                    <h5 className="font-bold text-amber-900">Upgrade Your Plan</h5>
+                  </div>
+                  <p className="text-sm text-amber-700 mb-3">Get premium features and priority support</p>
+                  <button
+                    onClick={onRequestUpgrade}
+                    className="w-full bg-amber-600 text-white py-2 px-4 rounded-lg font-bold hover:bg-amber-700 transition-colors"
+                  >
+                    Upgrade Now
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-8 p-4 bg-slate-50 rounded-xl border border-slate-200">
+            <h4 className="font-bold text-slate-900 mb-2">Need more help?</h4>
+            <p className="text-sm text-slate-600">
+              Check out our <a href="#" className="text-indigo-600 hover:underline">documentation</a> or
+              contact us at <a href="mailto:support@snapify.com" className="text-indigo-600 hover:underline">support@snapify.com</a>
+            </p>
           </div>
         </div>
       )}
