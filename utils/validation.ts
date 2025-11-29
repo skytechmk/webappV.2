@@ -22,14 +22,23 @@ export const validateEventDescription = (description: string): boolean => {
   return description.length <= 500;
 };
 
-// Sanitization utilities
+// Sanitization utilities - wrapped for testability
 export const sanitizeInput = (input: string): string => {
   if (typeof input !== 'string') return '';
-  return DOMPurify.sanitize(input.trim(), { ALLOWED_TAGS: [] });
+  return sanitizeHtmlInput(input.trim());
 };
 
 export const sanitizeHtml = (input: string): string => {
   if (typeof input !== 'string') return '';
+  return sanitizeHtmlContent(input);
+};
+
+// Internal functions that can be mocked
+export const sanitizeHtmlInput = (input: string): string => {
+  return DOMPurify.sanitize(input, { ALLOWED_TAGS: [] });
+};
+
+export const sanitizeHtmlContent = (input: string): string => {
   return DOMPurify.sanitize(input, {
     ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'u'],
     ALLOWED_ATTR: []

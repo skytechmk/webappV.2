@@ -13,7 +13,7 @@ export const api = {
         const res = await fetch(`${API_URL}/api/users?_t=${Date.now()}`, { headers: { ...getAuthHeaders() } });
         return res.json();
     },
-    
+
     login: async (email: string, password?: string): Promise<{ token: string, user: User }> => {
         const res = await fetch(`${API_URL}/api/auth/login`, {
             method: 'POST',
@@ -144,27 +144,54 @@ export const api = {
             const token = localStorage.getItem('snapify_token');
             if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
 
-            if (onProgress) {
-                xhr.upload.onprogress = (event) => {
-                    if (event.lengthComputable) onProgress(Math.round((event.loaded / event.total) * 100));
-                };
-            }
-
             xhr.onload = () => {
+                console.log('Upload response - status:', xhr.status, 'response:', xhr.responseText);
                 if (xhr.status >= 200 && xhr.status < 300) {
-                    try { resolve(JSON.parse(xhr.responseText)); } catch (e) { reject(new Error('Invalid JSON response')); }
-                } else { reject(new Error(xhr.statusText)); }
+                    try {
+                        const result = JSON.parse(xhr.responseText);
+                        console.log('Upload queued:', result);
+
+                        // Poll for completion status
+                        pollUploadStatus(result.uploadId, resolve, reject, onProgress);
+                    } catch (e) {
+                        console.error('JSON parse error:', e, 'response:', xhr.responseText);
+                        reject(new Error('Invalid JSON response'));
+                    }
+                } else {
+                    console.error('Upload failed - status:', xhr.status, 'statusText:', xhr.statusText, 'response:', xhr.responseText);
+                    reject(new Error(`Upload failed: ${xhr.status} ${xhr.statusText}`));
+                }
             };
-            xhr.onerror = () => reject(new Error('Network error'));
+
+            xhr.onerror = () => {
+                console.error('Upload network error');
+                reject(new Error('Network error during upload'));
+            };
+
+            xhr.ontimeout = () => {
+                console.error('Upload timeout');
+                reject(new Error('Upload timeout'));
+            };
+
+            xhr.timeout = 300000; // 5 minute timeout
+
+            console.log('Starting upload to:', `${API_URL}/api/media`);
             xhr.send(formData);
         });
+    },
+
+    // Check upload status
+    getUploadStatus: async (uploadId: string): Promise<{ status: string; progress: number; error?: string }> => {
+        const res = await fetch(`${API_URL}/api/media/upload/${uploadId}/status`, { headers: { ...getAuthHeaders() } });
+        if (!res.ok) throw new Error('Failed to get upload status');
+        return res.json();
     },
 
     generateImageCaption: async (base64Image: string): Promise<string> => {
         const res = await fetch(`${API_URL}/api/ai/generate-caption`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-            body: JSON.stringify({ base64Image })
+            body: JSON.stringify({ imageData: base64Image })
         });
         const data = await res.json();
         return data.caption || "Captured moment";
@@ -218,7 +245,7 @@ Example structure:
 
     likeMedia: async (id: string): Promise<void> => { await fetch(`${API_URL}/api/media/${id}/like`, { method: 'PUT' }); },
     deleteMedia: async (id: string): Promise<void> => { await fetch(`${API_URL}/api/media/${id}`, { method: 'DELETE', headers: { ...getAuthHeaders() } }); },
-    
+
     bulkDeleteMedia: async (mediaIds: string[]): Promise<{ success: boolean; deletedCount: number }> => {
         const res = await fetch(`${API_URL}/api/media/bulk-delete`, {
             method: 'POST',
@@ -246,7 +273,7 @@ Example structure:
         });
         return res.json();
     },
-    
+
 
     getSystemStorage: async (): Promise<{
         system: { filesystem: string; size: string; used: string; available: string; usePercent: string };
@@ -280,5 +307,86 @@ Example structure:
             headers: { ...getAuthHeaders() }
         });
         if (!res.ok) throw new Error("Failed to mark message as read");
+    },
+
+    // --- SYSTEM MANAGEMENT ---
+    cleanMinIOBucket: async (): Promise<{ success: boolean; message: string; deletedCount: number; totalSize: string; timestamp: string }> => {
+        const res = await fetch(`${API_URL}/api/system/clean-bucket`, {
+            method: 'POST',
+            headers: { ...getAuthHeaders() }
+        });
+        if (!res.ok) throw new Error("Failed to clean MinIO bucket");
+        return res.json();
+    },
+
+    clearUsersDatabase: async (): Promise<{
+        success: boolean;
+        message: string;
+        adminPreserved: string;
+        totalDeleted: number;
+        preCounts: Record<string, number>;
+        postCounts: Record<string, number>;
+        timestamp: string;
+    }> => {
+        const res = await fetch(`${API_URL}/api/system/clear-users`, {
+            method: 'POST',
+            headers: { ...getAuthHeaders() }
+        });
+        if (!res.ok) throw new Error("Failed to clear users database");
+        return res.json();
     }
+};
+
+// Polling function for upload status
+const pollUploadStatus = async (
+    uploadId: string,
+    resolve: (value: MediaItem) => void,
+    reject: (reason: Error) => void,
+    onProgress?: (percent: number) => void,
+    maxAttempts: number = 60,
+    interval: number = 2000
+) => {
+    let attempts = 0;
+
+    const poll = async () => {
+        try {
+            attempts++;
+            const status = await api.getUploadStatus(uploadId);
+
+            // Update progress callback
+            if (onProgress && status.progress !== undefined) {
+                onProgress(status.progress);
+            }
+
+            if (status.status === 'completed') {
+                // For now, return a placeholder - in production you'd fetch the actual media item
+                const mediaItem: MediaItem = {
+                    id: uploadId,
+                    eventId: '', // Would be populated from original request
+                    type: 'image', // Would be populated from original request
+                    url: '', // Would be populated from server response
+                    caption: '', // Would be populated from original request
+                    uploadedAt: new Date().toISOString(),
+                    uploaderName: '', // Would be populated from original request
+                    privacy: 'public'
+                };
+                resolve(mediaItem);
+            } else if (status.status === 'failed') {
+                reject(new Error(status.error || 'Upload failed'));
+            } else if (attempts >= maxAttempts) {
+                reject(new Error('Upload timeout'));
+            } else {
+                // Continue polling
+                setTimeout(poll, interval);
+            }
+        } catch (error) {
+            if (attempts >= maxAttempts) {
+                reject(new Error('Upload status check failed'));
+            } else {
+                setTimeout(poll, interval);
+            }
+        }
+    };
+
+    poll();
 };

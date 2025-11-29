@@ -63,28 +63,18 @@ export default defineConfig({
         cleanupOutdatedCaches: true, // FORCE CLEANUP
         runtimeCaching: [
           {
-            urlPattern: ({ url }) => url.pathname.includes('/api/proxy-media') || url.pathname.includes('/api/media'),
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'snapify-media-cache',
-              expiration: {
-                maxEntries: 500,
-                maxAgeSeconds: 60 * 60 * 24 * 30,
-              },
-              cacheableResponse: {
-                statuses: [0, 200]
-              }
-            }
-          },
-          {
-            urlPattern: ({ url }) => url.pathname.startsWith('/api/'),
+            // Cache API responses (event lists, user data) but NOT media URLs
+            // Media URLs are presigned and expire in 1 hour, so caching them would cause broken images
+            urlPattern: ({ url }) => url.pathname.startsWith('/api/') &&
+              !url.pathname.includes('/api/proxy-media') &&
+              !url.pathname.includes('/api/media'),
             handler: 'NetworkFirst',
             options: {
               cacheName: 'snapify-api-cache',
               networkTimeoutSeconds: 5,
               expiration: {
-                maxEntries: 50,
-                maxAgeSeconds: 60 * 60 * 24,
+                maxEntries: 100,
+                maxAgeSeconds: 60 * 60 * 24, // 24 hours for API responses
               },
               cacheableResponse: {
                 statuses: [0, 200]

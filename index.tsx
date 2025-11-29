@@ -1,24 +1,25 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import * as Sentry from '@sentry/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import './src/index.css';
 import App from './App';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { reportWebVitals } from './utils/performance';
 
-Sentry.init({
-  dsn: process.env.VITE_SENTRY_DSN || 'https://placeholder-dsn@sentry.io/placeholder', // Replace with actual DSN
-  environment: import.meta.env.PROD ? 'production' : 'development',
-  integrations: [
-    Sentry.browserTracingIntegration(),
-    Sentry.replayIntegration(),
-  ],
-  tracesSampleRate: 1.0,
-  replaysSessionSampleRate: 0.1,
-  replaysOnErrorSampleRate: 1.0,
-});
-
-const queryClient = new QueryClient();
+const sentryDsn = process.env.VITE_SENTRY_DSN;
+if (sentryDsn && sentryDsn !== 'https://placeholder-dsn@sentry.io/placeholder') {
+  Sentry.init({
+    dsn: sentryDsn,
+    environment: import.meta.env.PROD ? 'production' : 'development',
+    integrations: [
+      Sentry.browserTracingIntegration(),
+      Sentry.replayIntegration(),
+    ],
+    tracesSampleRate: 1.0,
+    replaysSessionSampleRate: 0.1,
+    replaysOnErrorSampleRate: 1.0,
+  });
+}
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -42,10 +43,8 @@ window.addEventListener('load', () => {
 
 root.render(
   <React.StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <ErrorBoundary>
-        <App />
-      </ErrorBoundary>
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   </React.StrictMode>
 );

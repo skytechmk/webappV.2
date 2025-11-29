@@ -64,7 +64,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                     {
                         theme: "filled_black",
                         size: "large",
-                        width: "100%",
+                        width: 400,
                         text: "continue_with",
                         shape: "pill",
                     }

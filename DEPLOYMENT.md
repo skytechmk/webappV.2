@@ -27,22 +27,51 @@
    sudo systemctl reload nginx
    ```
 
-5. **Setup SSL:**
-   ```bash
-   sudo certbot --nginx -d snapify.skytech.mk
-   ```
+5. **SSL Setup:** Handled automatically by Cloudflare - no action needed
 
 ## 📋 Prerequisites
 
 ### Server Requirements
 - **Ubuntu 20.04+** or similar Linux distribution
 - **Node.js 20+** and **npm**
+- **Redis** (recommended for caching)
 - **PM2** process manager
 - **nginx** web server
-- **SSL certificate** (Let's Encrypt recommended)
-- **Domain name** pointing to server
+- **SSL certificate** (handled by Cloudflare - no server setup needed)
+- **Domain name** pointing to server (via Cloudflare)
+
+### Infrastructure Setup
+
+#### Redis Installation (Recommended)
+
+```bash
+# Install Redis
+sudo apt update
+sudo apt install redis-server -y
+
+# Configure Redis (optional - for security)
+sudo nano /etc/redis/redis.conf
+# Set: supervised systemd
+# Set: requirepass your_secure_password
+
+# Start and enable Redis
+sudo systemctl start redis-server
+sudo systemctl enable redis-server
+
+# Test Redis connection
+redis-cli ping
+```
+
+#### Sentry Setup (Error Monitoring)
+
+1. Create account at [sentry.io](https://sentry.io)
+2. Create new project for Snapify
+3. Get your DSN from project settings
+4. Add DSN to environment variables
 
 ### External Services
+- **Redis server** (recommended for caching, optional but improves performance)
+- **Sentry account** (for error monitoring and alerting)
 - **MinIO server** running and accessible
 - **Google OAuth** credentials
 - **Gemini AI API** key
@@ -58,6 +87,13 @@ JWT_SECRET=your_strong_random_secret_here_minimum_64_chars
 ADMIN_PASSWORD=your_secure_admin_password
 VAPID_PUBLIC_KEY=your_vapid_public_key
 VAPID_PRIVATE_KEY=your_vapid_private_key
+
+# --- INFRASTRUCTURE (NEW) ---
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_PASSWORD=your_redis_password
+REDIS_DB=0
+SENTRY_DSN=https://your-sentry-dsn-here@sentry.io/project-id
 
 # --- CORS & DOMAINS ---
 CORS_ORIGIN=https://yourdomain.com,https://www.yourdomain.com
@@ -161,7 +197,16 @@ sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-### 4. SSL Certificate Setup
+### 4. SSL Certificate Setup (Optional - Handled by Cloudflare)
+
+Since this application uses Cloudflare for SSL termination, SSL certificates are managed automatically by Cloudflare. No additional SSL setup is required on the server.
+
+**Cloudflare SSL Settings:**
+- Ensure SSL/TLS encryption mode is set to "Full (strict)" or "Full"
+- Enable "Always Use HTTPS"
+- Configure SSL certificates in Cloudflare dashboard
+
+If you prefer to handle SSL directly on the server (not recommended with Cloudflare), you can use Let's Encrypt:
 
 ```bash
 # Install Certbot
@@ -170,8 +215,8 @@ sudo snap install core; sudo snap refresh core
 sudo snap install --classic certbot
 sudo ln -s /snap/bin/certbot /usr/bin/certbot
 
-# Get SSL certificate
-sudo certbot --nginx -d snapify.skytech.mk
+# Get SSL certificate (only if not using Cloudflare)
+sudo certbot --nginx -d yourdomain.com
 
 # Test renewal
 sudo certbot renew --dry-run
@@ -202,11 +247,19 @@ curl -X POST https://snapify.skytech.mk/api/auth/login \
 
 ### Application Testing
 
-1. **Frontend Access:** https://snapify.skytech.mk
-2. **Admin Login:** Use configured admin credentials
-3. **Create Event:** Test event creation
-4. **Upload Media:** Test file uploads
-5. **System Dashboard:** Check storage monitoring
+1. **Run Test Suite:**
+   ```bash
+   npm test
+   npm run test:coverage
+   ```
+
+2. **Frontend Access:** https://snapify.skytech.mk
+3. **Admin Login:** Use configured admin credentials
+4. **Create Event:** Test event creation
+5. **Upload Media:** Test file uploads
+6. **System Dashboard:** Check storage monitoring
+7. **Cache Performance:** Verify Redis caching is working
+8. **Error Monitoring:** Check Sentry dashboard for any errors
 
 ## 📊 Monitoring & Maintenance
 
@@ -242,11 +295,34 @@ sudo tail -f /var/log/nginx/error.log
 ### Application Logs
 
 ```bash
-# Application logs
+# Application logs (Winston structured logging)
 tail -f /var/www/snapify/logs/combined.log
 
 # Error logs
-tail -f /var/www/snapify/logs/err.log
+tail -f /var/www/snapify/logs/error.log
+
+# HTTP request logs
+tail -f /var/www/snapify/logs/combined.log | grep "HTTP"
+
+# Cache performance logs
+tail -f /var/www/snapify/logs/combined.log | grep "cache"
+```
+
+### Error Monitoring (Sentry)
+
+- **Dashboard:** Access your Sentry project dashboard
+- **Real-time Alerts:** Configure alerts for error spikes
+- **Performance Monitoring:** Track API response times
+- **Release Tracking:** Monitor deployment impact
+
+### Cache Monitoring
+
+```bash
+# Check Redis status
+redis-cli info | grep connected_clients
+
+# Monitor cache hit rates (check application logs)
+tail -f /var/www/snapify/logs/combined.log | grep -E "(cache|Cache)"
 ```
 
 ## 🔧 Troubleshooting

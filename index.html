@@ -6,7 +6,7 @@
     
     <!-- PWA & Mobile Settings -->
     <meta name="theme-color" content="#ffffff" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="SnapifY" />
     
@@ -35,70 +35,12 @@
     <meta property="twitter:image" content="https://via.placeholder.com/1200x630/6366f1/ffffff?text=SnapifY+-+Event+Sharing+Platform" />
 
     <!-- Favicon Fallbacks (PWA uses manifest, but browser needs these) -->
-    <link rel="icon" href="/favicon.ico" />
+    <link rel="icon" href="/pwa-192x192.png" />
     <link rel="apple-touch-icon" href="/pwa-192x192.png" />
     
-    <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
-    
-    <style>
-      :root {
-        --sat: env(safe-area-inset-top);
-        --sab: env(safe-area-inset-bottom);
-        --sal: env(safe-area-inset-left);
-        --sar: env(safe-area-inset-right);
-      }
-
-      /* APP SHELL SETUP: Better mobile handling */
-      html, body {
-        height: 100%;
-        width: 100%;
-        background-color: #f8fafc; /* matches bg-slate-50 */
-      }
-
-      #root {
-        min-height: 100vh;
-        min-height: 100dvh; /* Better mobile viewport height */
-      }
-
-      /* Prevent rubber-banding on iOS but allow normal scrolling */
-      @supports (-webkit-touch-callout: none) {
-        body {
-          overscroll-behavior-y: contain;
-        }
-      }
-
-      body {
-        font-family: 'Inter', sans-serif;
-        overscroll-behavior-y: none;
-      }
-
-      /* Custom scrollbar */
-      .no-scrollbar::-webkit-scrollbar {
-          display: none;
-      }
-      .no-scrollbar {
-          -ms-overflow-style: none;
-          scrollbar-width: none;
-      }
-      
-      @keyframes float {
-        0% { transform: translateY(0px); }
-        50% { transform: translateY(-20px); }
-        100% { transform: translateY(0px); }
-      }
-      
-      .animate-float {
-        animation: float 6s ease-in-out infinite;
-      }
-      
-      .animate-float-delayed {
-        animation: float 8s ease-in-out infinite;
-        animation-delay: 2s;
-      }
-    </style>
   <script type="importmap">
 {
   "imports": {
